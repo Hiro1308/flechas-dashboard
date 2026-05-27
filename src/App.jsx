@@ -6,6 +6,8 @@ import DashboardPage from "./pages/DashboardPage";
 import ParticipantesPage from "./pages/ParticipantesPage";
 import PagosPage from "./pages/PagosPage";
 import AsistenciasPage from "./pages/AsistenciasPage";
+import HorariosPage from "./pages/HorariosPage";
+import ParticipanteDetallePage from "./pages/ParticipanteDetallePage";
 
 export default function App() {
   return (
@@ -15,6 +17,8 @@ export default function App() {
         <Route path="/participantes" element={<ParticipantesPage />} />
         <Route path="/pagos" element={<PagosPage />} />
         <Route path="/asistencias" element={<AsistenciasPage />} />
+        <Route path="/horarios" element={<HorariosPage />} />
+        <Route path="/participantes/:id" element={<ParticipanteDetallePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" />} />

@@ -6,6 +6,7 @@ import {
   Wallet,
   CalendarCheck,
   Heart,
+  Clock,
 } from "lucide-react";
 
 const items = [
@@ -28,6 +29,11 @@ const items = [
     label: "Asistencias",
     icon: CalendarCheck,
     path: "/asistencias",
+  },
+  {
+    label: "Horarios",
+    icon: Clock,
+    path: "/horarios",
   },
 ];
 
