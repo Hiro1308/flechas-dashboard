@@ -1,471 +1,404 @@
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
-  User,
-  Wallet,
+  Ban,
   CalendarCheck,
   FileText,
-  Edit3,
-  Ban,
-  Upload,
+  User,
+  Wallet,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-
 import Card from "../components/ui/Card";
-
-const participanteMock = {
-  id: "1",
-  nombre: "María",
-  apellido: "González",
-  ci: "4.123.456-7",
-  telefono: "099 123 456",
-  telefonoAlternativo: "098 555 555",
-  email: "maria@email.com",
-  direccion: "Av. Italia 1234",
-  ocupacion: "Docente",
-  tipoParticipante: "Fundación",
-  estado: "activa",
-  fechaIngreso: "16/05/2026",
-
-  prestadorSalud: "ASSE",
-  emergenciaMovil: "UCM",
-  fechaCirugia: "10/02/2025",
-  tipoCirugia: "Mastectomía",
-  hta: true,
-  diabetes: false,
-  alergias: "Penicilina",
-  otrosAntecedentes: "Sin observaciones relevantes",
-  desarrollaLinfedema: true,
-  miembroAfectado: "Izquierdo",
-  observaciones: "Paciente activa, buena asistencia.",
-};
-
-const pagosMock = [
-  {
-    id: 1,
-    mes: "Mayo",
-    anio: 2026,
-    fechaPago: "10/05/2026",
-    monto: 1200,
-  },
-  {
-    id: 2,
-    mes: "Abril",
-    anio: 2026,
-    fechaPago: "08/04/2026",
-    monto: 1200,
-  },
-];
-
-const asistenciasMock = [
-  {
-    id: 1,
-    fecha: "16/05/2026",
-    horario: "20:00 - 21:30",
-    observaciones: "Asistió normalmente",
-  },
-  {
-    id: 2,
-    fecha: "14/05/2026",
-    horario: "20:00 - 21:30",
-    observaciones: "",
-  },
-];
-
-const archivosMock = [
-  {
-    id: 1,
-    nombre: "Consentimiento informado.pdf",
-    tipo: "PDF",
-    fecha: "16/05/2026",
-  },
-  {
-    id: 2,
-    nombre: "Ficha escaneada.jpg",
-    tipo: "Imagen",
-    fecha: "16/05/2026",
-  },
-];
+import { supabase } from "../services/supabase";
 
 type Tab = "datos" | "pagos" | "asistencias" | "archivos";
-
-const tabsPermitidas: Tab[] = ["datos", "pagos", "asistencias", "archivos"];
-
-function getValidTab(value: string | null): Tab {
-  if (value && tabsPermitidas.includes(value as Tab)) {
-    return value as Tab;
-  }
-
-  return "datos";
-}
-
+type Participante = {
+  id: string;
+  nombre: string;
+  apellido: string;
+  ci: string;
+  telefono: string | null;
+  telefono_alternativo: string | null;
+  email: string | null;
+  direccion: string | null;
+  ocupacion: string | null;
+  tipo_participante: string;
+  estado: string;
+  fecha_ingreso: string;
+  prestador_salud: string | null;
+  emergencia_movil: string | null;
+  fecha_cirugia: string | null;
+  tipo_cirugia: string | null;
+  hta: boolean | null;
+  diabetes: boolean | null;
+  alergias: string | null;
+  otros_antecedentes: string | null;
+  desarrolla_linfedema: boolean | null;
+  miembro_afectado: string | null;
+  observaciones: string | null;
+};
+type Pago = {
+  id: string;
+  mes_abonado: number;
+  anio_abonado: number;
+  fecha_pago: string;
+  monto: number | null;
+  observaciones: string | null;
+};
+type Asistencia = {
+  id: string;
+  fecha: string;
+  hora_inicio_snapshot: string | null;
+  hora_fin_snapshot: string | null;
+  observaciones: string | null;
+};
+type Archivo = {
+  id: string;
+  nombre: string;
+  url: string;
+  tipo: string | null;
+  created_at: string;
+};
+const meses = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+const fmt = (v?: string | null, dateOnly = false) =>
+  !v
+    ? "Sin registrar"
+    : new Intl.DateTimeFormat(
+        "es-UY",
+        dateOnly ? undefined : { dateStyle: "short", timeStyle: "short" },
+      ).format(new Date(dateOnly ? `${v}T00:00:00` : v));
 export default function ParticipanteDetallePage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const tab = getValidTab(searchParams.get("tab"));
-
-  const handleTabChange = (nextTab: Tab) => {
-    setSearchParams({ tab: nextTab });
+  const [sp, setSp] = useSearchParams();
+  const raw = sp.get("tab");
+  const tab: Tab = (
+    ["datos", "pagos", "asistencias", "archivos"].includes(raw ?? "")
+      ? raw
+      : "datos"
+  ) as Tab;
+  const [p, setP] = useState<Participante | null>(null);
+  const [pagos, setPagos] = useState<Pago[]>([]);
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
+  const [archivos, setArchivos] = useState<Archivo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!id) return;
+    void (async () => {
+      setLoading(true);
+      const [
+        { data: p, error: e1 },
+        { data: pg, error: e2 },
+        { data: a, error: e3 },
+        { data: f, error: e4 },
+      ] = await Promise.all([
+        supabase.from("participantes").select("*").eq("id", id).single(),
+        supabase
+          .from("pagos")
+          .select("*")
+          .eq("id_participante", id)
+          .order("fecha_pago", { ascending: false }),
+        supabase
+          .from("asistencias")
+          .select("*")
+          .eq("id_participante", id)
+          .order("fecha", { ascending: false }),
+        supabase
+          .from("archivos_participante")
+          .select("*")
+          .eq("id_participante", id)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (e1 || e2 || e3 || e4)
+        setError(
+          e1?.message || e2?.message || e3?.message || e4?.message || "",
+        );
+      else {
+        setP(p as Participante);
+        setPagos((pg ?? []) as Pago[]);
+        setAsistencias((a ?? []) as Asistencia[]);
+        setArchivos((f ?? []) as Archivo[]);
+      }
+      setLoading(false);
+    })();
+  }, [id]);
+  const darBaja = async () => {
+    if (!id || !p) return;
+    const nuevo = p.estado === "activa" ? "baja" : "activa";
+    const { error } = await supabase
+      .from("participantes")
+      .update({
+        estado: nuevo,
+        fecha_egreso:
+          nuevo === "baja" ? new Date().toISOString().slice(0, 10) : null,
+      })
+      .eq("id", id);
+    if (error) setError(error.message);
+    else setP({ ...p, estado: nuevo });
   };
-
+  if (loading)
+    return (
+      <div className="p-12 text-center text-slate-500">Cargando ficha...</div>
+    );
+  if (!p)
+    return (
+      <div className="rounded-2xl bg-red-50 p-4 text-red-700">
+        {error || "No se encontró la participante."}
+      </div>
+    );
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between">
         <button
           onClick={() => navigate("/participantes")}
-          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-semibold text-slate-600 transition hover:bg-slate-50"
+          className="flex items-center gap-2 rounded-2xl border bg-white px-4 py-3"
         >
           <ArrowLeft className="h-4 w-4" />
           Volver
         </button>
-
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-semibold text-slate-600 transition hover:bg-slate-50">
-            <Edit3 className="h-4 w-4" />
-            Editar ficha
-          </button>
-
-          <button className="flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600 transition hover:bg-red-100">
-            <Ban className="h-4 w-4" />
-            Dar de baja
-          </button>
-        </div>
+        <button
+          onClick={() => void darBaja()}
+          className="flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-3 font-semibold text-red-600"
+        >
+          <Ban className="h-4 w-4" />
+          {p.estado === "activa" ? "Dar de baja" : "Reactivar"}
+        </button>
       </div>
-
+      {error && (
+        <div className="rounded-2xl bg-red-50 p-4 text-red-700">{error}</div>
+      )}
       <Card>
-        <div className="flex items-start justify-between gap-6">
+        <div className="flex items-start justify-between">
           <div className="flex items-center gap-5">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-pink-100">
               <User className="h-10 w-10 text-pink-600" />
             </div>
-
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-slate-900">
-                  {participanteMock.nombre} {participanteMock.apellido}
+              <div className="flex gap-3">
+                <h1 className="text-3xl font-bold">
+                  {p.nombre} {p.apellido}
                 </h1>
-
-                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                  Activa
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${p.estado === "activa" ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}
+                >
+                  {p.estado}
                 </span>
               </div>
-
               <p className="mt-2 text-slate-500">
-                CI: {participanteMock.ci} · {participanteMock.tipoParticipante}
+                CI: {p.ci} · {p.tipo_participante}
               </p>
-
-              <p className="mt-1 text-sm text-slate-400">ID interno: {id}</p>
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-3">
-            <MiniStat label="Último pago" value="10/05/2026" />
-            <MiniStat label="Última asistencia" value="16/05/2026" />
-            <MiniStat label="Ingreso" value={participanteMock.fechaIngreso} />
+            <Mini
+              label="Último pago"
+              value={
+                pagos[0] ? fmt(pagos[0].fecha_pago, true) : "Sin registrar"
+              }
+            />
+            <Mini
+              label="Última asistencia"
+              value={
+                asistencias[0] ? fmt(asistencias[0].fecha) : "Sin registrar"
+              }
+            />
+            <Mini label="Ingreso" value={fmt(p.fecha_ingreso, true)} />
           </div>
         </div>
       </Card>
-
       <Card className="p-2">
         <div className="flex gap-2">
-          <TabButton
-            active={tab === "datos"}
-            icon={<User className="h-4 w-4" />}
-            label="Datos"
-            onClick={() => handleTabChange("datos")}
-          />
-
-          <TabButton
-            active={tab === "pagos"}
-            icon={<Wallet className="h-4 w-4" />}
-            label="Pagos"
-            onClick={() => handleTabChange("pagos")}
-          />
-
-          <TabButton
-            active={tab === "asistencias"}
-            icon={<CalendarCheck className="h-4 w-4" />}
-            label="Asistencias"
-            onClick={() => handleTabChange("asistencias")}
-          />
-
-          <TabButton
-            active={tab === "archivos"}
-            icon={<FileText className="h-4 w-4" />}
-            label="Archivos"
-            onClick={() => handleTabChange("archivos")}
-          />
+          {(
+            [
+              ["datos", "Datos", <User className="h-4 w-4" />],
+              ["pagos", "Pagos", <Wallet className="h-4 w-4" />],
+              [
+                "asistencias",
+                "Asistencias",
+                <CalendarCheck className="h-4 w-4" />,
+              ],
+              ["archivos", "Archivos", <FileText className="h-4 w-4" />],
+            ] as [Tab, string, React.ReactNode][]
+          ).map(([key, label, icon]) => (
+            <button
+              key={key}
+              onClick={() => setSp({ tab: key })}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 font-semibold ${tab === key ? "bg-pink-100 text-pink-700" : "text-slate-500"}`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
         </div>
       </Card>
-
-      {tab === "datos" && <DatosTab />}
-      {tab === "pagos" && <PagosTab />}
-      {tab === "asistencias" && <AsistenciasTab />}
-      {tab === "archivos" && <ArchivosTab />}
+      {tab === "datos" && (
+        <div className="grid grid-cols-2 gap-6">
+          <InfoCard
+            title="Datos personales"
+            items={[
+              ["Nombre", p.nombre],
+              ["Apellido", p.apellido],
+              ["Cédula", p.ci],
+              ["Teléfono", p.telefono],
+              ["Teléfono alternativo", p.telefono_alternativo],
+              ["Email", p.email],
+              ["Dirección", p.direccion],
+              ["Ocupación", p.ocupacion],
+            ]}
+          />
+          <InfoCard
+            title="Datos administrativos"
+            items={[
+              ["Tipo", p.tipo_participante],
+              ["Estado", p.estado],
+              ["Fecha de ingreso", fmt(p.fecha_ingreso, true)],
+            ]}
+          />
+          <InfoCard
+            title="Información de salud"
+            items={[
+              ["Prestador", p.prestador_salud],
+              ["Emergencia móvil", p.emergencia_movil],
+              ["Fecha cirugía", fmt(p.fecha_cirugia, true)],
+              ["Tipo cirugía", p.tipo_cirugia],
+            ]}
+          />
+          <InfoCard
+            title="Antecedentes y valoración"
+            items={[
+              ["HTA", p.hta ? "Sí" : "No"],
+              ["Diabetes", p.diabetes ? "Sí" : "No"],
+              ["Alergias", p.alergias],
+              ["Otros antecedentes", p.otros_antecedentes],
+              [
+                "Desarrolla linfedema",
+                p.desarrolla_linfedema == null
+                  ? "Sin registrar"
+                  : p.desarrolla_linfedema
+                    ? "Sí"
+                    : "No",
+              ],
+              ["Miembro afectado", p.miembro_afectado],
+              ["Observaciones", p.observaciones],
+            ]}
+          />
+        </div>
+      )}
+      {tab === "pagos" && (
+        <Table
+          headers={["Mes", "Fecha pago", "Monto", "Observaciones"]}
+          rows={pagos.map((x) => [
+            `${meses[x.mes_abonado - 1]} ${x.anio_abonado}`,
+            fmt(x.fecha_pago, true),
+            x.monto == null
+              ? "Sin registrar"
+              : `$${Number(x.monto).toLocaleString("es-UY")}`,
+            x.observaciones || "Sin observaciones",
+          ])}
+        />
+      )}{" "}
+      {tab === "asistencias" && (
+        <Table
+          headers={["Fecha", "Horario", "Observaciones"]}
+          rows={asistencias.map((x) => [
+            fmt(x.fecha),
+            `${x.hora_inicio_snapshot?.slice(0, 5) ?? "—"}${x.hora_fin_snapshot ? ` - ${x.hora_fin_snapshot.slice(0, 5)}` : ""}`,
+            x.observaciones || "Sin observaciones",
+          ])}
+        />
+      )}{" "}
+      {tab === "archivos" && (
+        <Card>
+          <div className="grid grid-cols-3 gap-4">
+            {archivos.map((x) => (
+              <a
+                key={x.id}
+                href={x.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-3xl border bg-slate-50 p-5"
+              >
+                <FileText className="mb-4 text-pink-600" />
+                <h3 className="font-bold">{x.nombre}</h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  {x.tipo || "Archivo"} · {fmt(x.created_at)}
+                </p>
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
-
-function DatosTab() {
+function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[1fr_1fr] gap-6">
-      <Card>
-        <SectionTitle title="Datos personales" />
-
-        <InfoGrid
-          items={[
-            ["Nombre", participanteMock.nombre],
-            ["Apellido", participanteMock.apellido],
-            ["Cédula", participanteMock.ci],
-            ["Teléfono", participanteMock.telefono],
-            ["Teléfono alternativo", participanteMock.telefonoAlternativo],
-            ["Email", participanteMock.email],
-            ["Dirección", participanteMock.direccion],
-            ["Ocupación", participanteMock.ocupacion],
-          ]}
-        />
-      </Card>
-
-      <Card>
-        <SectionTitle title="Datos administrativos" />
-
-        <InfoGrid
-          items={[
-            ["Tipo", participanteMock.tipoParticipante],
-            ["Estado", participanteMock.estado],
-            ["Fecha de ingreso", participanteMock.fechaIngreso],
-          ]}
-        />
-      </Card>
-
-      <Card>
-        <SectionTitle title="Información de salud" />
-
-        <InfoGrid
-          items={[
-            ["Prestador de salud", participanteMock.prestadorSalud],
-            ["Emergencia móvil", participanteMock.emergenciaMovil],
-            ["Fecha de cirugía", participanteMock.fechaCirugia],
-            ["Tipo de cirugía", participanteMock.tipoCirugia],
-          ]}
-        />
-      </Card>
-
-      <Card>
-        <SectionTitle title="Antecedentes y valoración" />
-
-        <InfoGrid
-          items={[
-            ["HTA", participanteMock.hta ? "Sí" : "No"],
-            ["Diabetes", participanteMock.diabetes ? "Sí" : "No"],
-            ["Alergias", participanteMock.alergias],
-            ["Otros antecedentes", participanteMock.otrosAntecedentes],
-            [
-              "Desarrolla linfedema",
-              participanteMock.desarrollaLinfedema ? "Sí" : "No",
-            ],
-            ["Miembro afectado", participanteMock.miembroAfectado],
-            ["Observaciones", participanteMock.observaciones],
-          ]}
-        />
-      </Card>
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <p className="text-xs uppercase text-slate-400">{label}</p>
+      <p className="mt-1 font-bold">{value}</p>
     </div>
   );
 }
-
-function PagosTab() {
-  return (
-    <Card className="p-0">
-      <div className="border-b border-slate-200 px-6 py-5">
-        <h2 className="text-xl font-bold text-slate-900">
-          Historial de pagos
-        </h2>
-      </div>
-
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left">
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Mes
-            </th>
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Fecha pago
-            </th>
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Monto
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {pagosMock.map((pago) => (
-            <tr key={pago.id} className="border-b border-slate-100">
-              <td className="px-6 py-5 font-medium">
-                {pago.mes} {pago.anio}
-              </td>
-
-              <td className="px-6 py-5 text-slate-600">{pago.fechaPago}</td>
-
-              <td className="px-6 py-5 font-semibold text-slate-900">
-                ${pago.monto.toLocaleString("es-UY")}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
-  );
-}
-
-function AsistenciasTab() {
-  return (
-    <Card className="p-0">
-      <div className="border-b border-slate-200 px-6 py-5">
-        <h2 className="text-xl font-bold text-slate-900">
-          Historial de asistencias
-        </h2>
-      </div>
-
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left">
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Fecha
-            </th>
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Horario
-            </th>
-            <th className="px-6 py-4 text-sm font-semibold text-slate-600">
-              Observaciones
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {asistenciasMock.map((asistencia) => (
-            <tr key={asistencia.id} className="border-b border-slate-100">
-              <td className="px-6 py-5 font-medium">{asistencia.fecha}</td>
-
-              <td className="px-6 py-5 text-slate-600">
-                {asistencia.horario} hs
-              </td>
-
-              <td className="px-6 py-5 text-slate-600">
-                {asistencia.observaciones || "Sin observaciones"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
-  );
-}
-
-function ArchivosTab() {
+function InfoCard({
+  title,
+  items,
+}: {
+  title: string;
+  items: [string, string | null][];
+}) {
   return (
     <Card>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">
-            Archivos adjuntos
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Consentimientos, fichas escaneadas y documentos.
-          </p>
-        </div>
-
-        <button className="flex items-center gap-2 rounded-2xl bg-pink-600 px-4 py-3 font-semibold text-white transition hover:bg-pink-700">
-          <Upload className="h-4 w-4" />
-          Subir archivo
-        </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        {archivosMock.map((archivo) => (
-          <div
-            key={archivo.id}
-            className="rounded-3xl border border-slate-200 bg-slate-50 p-5"
-          >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white">
-              <FileText className="h-6 w-6 text-pink-600" />
-            </div>
-
-            <h3 className="font-bold text-slate-900">{archivo.nombre}</h3>
-
-            <p className="mt-2 text-sm text-slate-500">
-              {archivo.tipo} · {archivo.fecha}
-            </p>
+      <h2 className="mb-5 text-xl font-bold">{title}</h2>
+      <div className="grid gap-4">
+        {items.map(([l, v]) => (
+          <div key={l} className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-xs uppercase text-slate-400">{l}</p>
+            <p className="mt-1 font-medium">{v || "Sin registrar"}</p>
           </div>
         ))}
       </div>
     </Card>
   );
 }
-
-function MiniStat({ label, value }: { label: string; value: string }) {
+function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-      <p className="text-xs font-semibold uppercase text-slate-400">{label}</p>
-
-      <p className="mt-1 font-bold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3
-        font-semibold transition
-        ${
-          active
-            ? "bg-pink-100 text-pink-700"
-            : "text-slate-500 hover:bg-slate-50"
-        }
-      `}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function SectionTitle({ title }: { title: string }) {
-  return <h2 className="mb-5 text-xl font-bold text-slate-900">{title}</h2>;
-}
-
-function InfoGrid({ items }: { items: [string, string][] }) {
-  return (
-    <div className="grid grid-cols-1 gap-4">
-      {items.map(([label, value]) => (
-        <div
-          key={label}
-          className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
-        >
-          <p className="text-xs font-semibold uppercase text-slate-400">
-            {label}
-          </p>
-
-          <p className="mt-1 font-medium text-slate-900">
-            {value || "Sin registrar"}
-          </p>
-        </div>
-      ))}
-    </div>
+    <Card className="p-0">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b bg-slate-50 text-left">
+            {headers.map((h) => (
+              <th key={h} className="px-6 py-4 text-sm text-slate-600">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b">
+              {r.map((c, j) => (
+                <td key={j} className="px-6 py-5">
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
