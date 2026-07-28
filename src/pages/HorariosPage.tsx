@@ -14,6 +14,7 @@ import {
 
 import Card from "../components/ui/Card";
 import { supabase } from "../services/supabase";
+import { TimePicker } from "@mantine/dates";
 
 type HorarioRow = {
   id: string;
@@ -64,17 +65,6 @@ const diasSemana = [
     label: "Domingo",
   },
 ];
-
-const opcionesHora = Array.from(
-  {
-    length: 24,
-  },
-  (_, hora) =>
-    ["00", "15", "30", "45"].map(
-      (minutos) =>
-        `${String(hora).padStart(2, "0")}:${minutos}`,
-    ),
-).flat();
 
 function normalizarHora(value?: string | null) {
   if (!value) {
@@ -825,49 +815,66 @@ function TimeSelect({
   required?: boolean;
 }) {
   return (
-    <div className="relative min-w-[145px]">
-      <select
-        value={value}
-        disabled={disabled}
-        required={required}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
-        className="
-          w-full appearance-none
-          rounded-2xl border
-          border-slate-300 bg-[#F5F9FF]
-          px-4 py-3 pr-10
-          font-medium text-slate-900
-          shadow-sm outline-none
-          transition-colors
-          hover:border-slate-400
-          focus:border-pink-400
-          focus:bg-white
-          focus:ring-4
-          focus:ring-pink-100
-          disabled:cursor-not-allowed
-          disabled:opacity-60
-        "
-      >
-        {allowEmpty && (
-          <option value="">Sin hora</option>
-        )}
+    <TimePicker
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      required={required}
+      withDropdown
+      format="24h"
+      minutesStep={5}
+      clearable={allowEmpty}
+      size="md"
+      radius="lg"
+      rightSection={
+        <Clock className="h-4 w-4 text-slate-400" />
+      }
+      popoverProps={{
+        position: "bottom-start",
+        shadow: "lg",
+        radius: "lg",
+        withinPortal: true,
+      }}
+      styles={{
+        root: {
+          width: 170,
+          minWidth: 170,
+        },
 
-        {opcionesHora.map((hora) => (
-          <option key={hora} value={hora}>
-            {hora}
-          </option>
-        ))}
-      </select>
+        input: {
+          minHeight: 48,
+          border: "1px solid #cbd5e1",
+          borderRadius: 16,
+          backgroundColor: "#F5F9FF",
+          boxShadow:
+            "0 1px 2px rgba(15, 23, 42, 0.05)",
+        },
 
-      <Clock
-        className="
-          pointer-events-none absolute
-          right-3 top-1/2 h-4 w-4
-          -translate-y-1/2 text-slate-400
-        "
-      />
-    </div>
+        fieldsRoot: {
+          border: 0,
+          backgroundColor: "transparent",
+          boxShadow: "none",
+        },
+
+        field: {
+          border: 0,
+          backgroundColor: "transparent",
+          boxShadow: "none",
+          fontSize: 15,
+          fontWeight: 600,
+          color: "#0f172a",
+        },
+
+        dropdown: {
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          overflow: "hidden",
+        },
+
+        control: {
+          borderRadius: 10,
+        },
+      }}
+    />
   );
 }

@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 
 import Card from "../components/ui/Card";
 import { supabase } from "../services/supabase";
+import FormatHelper from "../helpers/FormatHelper";
 
 type Participante = {
   id: string;
@@ -39,6 +40,7 @@ type Pago = {
     nombre: string;
     apellido: string;
     ci: string;
+    foto_perfil_path: string | null;
   } | null;
 };
 
@@ -49,6 +51,11 @@ type PagoForm = {
   monto: string;
   observaciones: string;
 };
+
+const FOTO_BUCKET = "fotos-participantes";
+
+const PLACEHOLDER_FOTO =
+  "/placeholder_person.png";
 
 const meses = [
   "Enero",
@@ -71,7 +78,9 @@ function obtenerFechaLocal() {
   const diferenciaZonaHoraria =
     fecha.getTimezoneOffset() * 60_000;
 
-  return new Date(fecha.getTime() - diferenciaZonaHoraria)
+  return new Date(
+    fecha.getTime() - diferenciaZonaHoraria,
+  )
     .toISOString()
     .slice(0, 10);
 }
@@ -95,41 +104,59 @@ function formatearFecha(fecha: string) {
 }
 
 function formatearMonto(monto: number) {
-  return `$${monto.toLocaleString("es-UY")}`;
+  return `$${monto.toLocaleString("es-US")}`;
 }
 
 export default function PagosPage() {
   const navigate = useNavigate();
 
   const [pagos, setPagos] = useState<Pago[]>([]);
-  const [participantes, setParticipantes] = useState<
-    Participante[]
-  >([]);
 
-  const [showForm, setShowForm] = useState(false);
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaPersona, setBusquedaPersona] =
+  const [
+    participantes,
+    setParticipantes,
+  ] = useState<Participante[]>([]);
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [busqueda, setBusqueda] =
     useState("");
+
+  const [
+    busquedaPersona,
+    setBusquedaPersona,
+  ] = useState("");
 
   const [seleccionada, setSeleccionada] =
     useState<Participante | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [pageError, setPageError] = useState("");
-  const [formError, setFormError] = useState("");
+  const [saving, setSaving] =
+    useState(false);
 
-  const [form, setForm] = useState<PagoForm>(
-    crearFormularioInicial,
-  );
+  const [pageError, setPageError] =
+    useState("");
+
+  const [formError, setFormError] =
+    useState("");
+
+  const [form, setForm] =
+    useState<PagoForm>(
+      crearFormularioInicial,
+    );
 
   const cargar = async () => {
     setLoading(true);
     setPageError("");
 
     const [
-      { data: pagosData, error: pagosError },
+      {
+        data: pagosData,
+        error: pagosError,
+      },
       {
         data: participantesData,
         error: participantesError,
@@ -149,13 +176,15 @@ export default function PagosPage() {
             participantes (
               nombre,
               apellido,
-              ci
+              ci,
+              foto_perfil_path
             )
           `,
         )
         .order("fecha_pago", {
           ascending: false,
         }),
+
       supabase
         .from("participantes")
         .select(
@@ -186,7 +215,10 @@ export default function PagosPage() {
       setPagos([]);
       setParticipantes([]);
     } else {
-      setPagos((pagosData ?? []) as unknown as Pago[]);
+      setPagos(
+        (pagosData ??
+          []) as unknown as Pago[],
+      );
 
       setParticipantes(
         (participantesData ??
@@ -201,57 +233,84 @@ export default function PagosPage() {
     void cargar();
   }, []);
 
-  const resultadosParticipantes = useMemo(() => {
-    const textoBusqueda = busquedaPersona
-      .trim()
-      .toLowerCase();
-
-    if (textoBusqueda.length < 2) {
-      return [];
-    }
-
-    return participantes
-      .filter((participante) => {
-        const textoParticipante = [
-          participante.nombre,
-          participante.apellido,
-          participante.ci,
-          participante.telefono ?? "",
-        ]
-          .join(" ")
+  const resultadosParticipantes =
+    useMemo(() => {
+      const textoBusqueda =
+        busquedaPersona
+          .trim()
           .toLowerCase();
 
-        return textoParticipante.includes(textoBusqueda);
-      })
-      .slice(0, 6);
-  }, [busquedaPersona, participantes]);
+      if (textoBusqueda.length < 2) {
+        return [];
+      }
+
+      return participantes
+        .filter((participante) => {
+          const coincideTexto = [
+            participante.nombre,
+            participante.apellido,
+            participante.telefono ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(textoBusqueda);
+
+          const coincideCedula =
+            FormatHelper.cedulaIncluyeBusqueda(
+              participante.ci,
+              busquedaPersona,
+            );
+
+          return (
+            coincideTexto ||
+            coincideCedula
+          );
+        })
+        .slice(0, 6);
+    }, [
+      busquedaPersona,
+      participantes,
+    ]);
 
   const pagosVisibles = useMemo(() => {
-    const textoBusqueda = busqueda.trim().toLowerCase();
+    const textoBusqueda = busqueda
+      .trim()
+      .toLowerCase();
 
     if (!textoBusqueda) {
       return pagos;
     }
 
     return pagos.filter((pago) => {
-      const textoPago = [
+      const coincideTexto = [
         pago.participantes?.nombre ?? "",
         pago.participantes?.apellido ?? "",
-        pago.participantes?.ci ?? "",
         meses[pago.mes_abonado - 1] ?? "",
         String(pago.anio_abonado),
       ]
         .join(" ")
-        .toLowerCase();
+        .toLowerCase()
+        .includes(textoBusqueda);
 
-      return textoPago.includes(textoBusqueda);
+      const coincideCedula =
+        FormatHelper.cedulaIncluyeBusqueda(
+          pago.participantes?.ci,
+          busqueda,
+        );
+
+      return (
+        coincideTexto ||
+        coincideCedula
+      );
     });
   }, [busqueda, pagos]);
 
   const estadisticas = useMemo(() => {
     const fechaActual = new Date();
-    const mesActual = fechaActual.getMonth() + 1;
-    const anioActual = fechaActual.getFullYear();
+    const mesActual =
+      fechaActual.getMonth() + 1;
+    const anioActual =
+      fechaActual.getFullYear();
 
     const pagosDelMes = pagos.filter(
       (pago) =>
@@ -259,9 +318,13 @@ export default function PagosPage() {
         pago.anio_abonado === anioActual,
     );
 
-    const participantesQuePagaron = new Set(
-      pagosDelMes.map((pago) => pago.id_participante),
-    );
+    const participantesQuePagaron =
+      new Set(
+        pagosDelMes.map(
+          (pago) =>
+            pago.id_participante,
+        ),
+      );
 
     const pendientes = Math.max(
       0,
@@ -271,7 +334,8 @@ export default function PagosPage() {
 
     const recaudado = pagosDelMes.reduce(
       (total, pago) =>
-        total + Number(pago.monto ?? 0),
+        total +
+        Number(pago.monto ?? 0),
       0,
     );
 
@@ -320,15 +384,25 @@ export default function PagosPage() {
     const { error } = await supabase
       .from("pagos")
       .insert({
-        id_participante: seleccionada.id,
-        fecha_pago: form.fecha_pago,
-        mes_abonado: Number(form.mes_abonado),
-        anio_abonado: Number(form.anio_abonado),
+        id_participante:
+          seleccionada.id,
+
+        fecha_pago:
+          form.fecha_pago,
+
+        mes_abonado:
+          Number(form.mes_abonado),
+
+        anio_abonado:
+          Number(form.anio_abonado),
+
         monto: form.monto
           ? Number(form.monto)
           : null,
+
         observaciones:
-          form.observaciones.trim() || null,
+          form.observaciones.trim() ||
+          null,
       });
 
     if (error) {
@@ -382,12 +456,15 @@ export default function PagosPage() {
             type="button"
             onClick={abrirFormulario}
             className="
-              flex items-center justify-center gap-2
+              flex items-center
+              justify-center gap-2
               rounded-2xl bg-pink-600
-              px-5 py-3 font-semibold text-white
-              shadow-sm transition-colors
+              px-5 py-3 font-semibold
+              text-white shadow-sm
+              transition-colors
               hover:bg-pink-700
-              focus:outline-none focus:ring-4
+              focus:outline-none
+              focus:ring-4
               focus:ring-pink-200
             "
           >
@@ -405,7 +482,9 @@ export default function PagosPage() {
         >
           <Stat
             label="Pagos del mes"
-            value={String(estadisticas.pagosDelMes)}
+            value={String(
+              estadisticas.pagosDelMes,
+            )}
             icon={
               <CheckCircle2 className="h-6 w-6 text-green-600" />
             }
@@ -414,7 +493,9 @@ export default function PagosPage() {
 
           <Stat
             label="Pendientes"
-            value={String(estadisticas.pendientes)}
+            value={String(
+              estadisticas.pendientes,
+            )}
             icon={
               <AlertCircle className="h-6 w-6 text-red-500" />
             }
@@ -438,9 +519,10 @@ export default function PagosPage() {
         {pageError && (
           <div
             className="
-              rounded-2xl border border-red-200
-              bg-red-50 px-4 py-3
-              text-sm text-red-700
+              rounded-2xl border
+              border-red-200 bg-red-50
+              px-4 py-3 text-sm
+              text-red-700
             "
           >
             {pageError}
@@ -471,7 +553,8 @@ export default function PagosPage() {
               className="
                 flex items-center gap-3
                 rounded-2xl border
-                border-slate-300 bg-[#F5F9FF]
+                border-slate-300
+                bg-[#F5F9FF]
                 px-4 py-3 shadow-sm
                 transition-colors
                 focus-within:border-pink-400
@@ -486,12 +569,15 @@ export default function PagosPage() {
                 type="search"
                 value={busqueda}
                 onChange={(event) =>
-                  setBusqueda(event.target.value)
+                  setBusqueda(
+                    event.target.value,
+                  )
                 }
                 placeholder="Buscar participante..."
                 className="
-                  w-full min-w-0 bg-transparent
-                  text-sm text-slate-900
+                  w-full min-w-0
+                  bg-transparent text-sm
+                  text-slate-900
                   outline-none
                   placeholder:text-slate-400
                   md:w-72
@@ -505,23 +591,39 @@ export default function PagosPage() {
               <thead>
                 <tr
                   className="
-                    border-b border-slate-200
-                    bg-[#F5F9FF] text-left
+                    border-b
+                    border-slate-200
+                    bg-[#F5F9FF]
+                    text-left
                   "
                 >
+                  <th
+                    aria-label="Foto de perfil"
+                    className="
+                      w-[88px]
+                      px-4 py-4
+                    "
+                  />
+
                   <TableHeader>
                     Participante
                   </TableHeader>
 
-                  <TableHeader>CI</TableHeader>
+                  <TableHeader>
+                    CI
+                  </TableHeader>
 
-                  <TableHeader>Mes</TableHeader>
+                  <TableHeader>
+                    Mes
+                  </TableHeader>
 
                   <TableHeader>
                     Fecha de pago
                   </TableHeader>
 
-                  <TableHeader>Monto</TableHeader>
+                  <TableHeader>
+                    Monto
+                  </TableHeader>
                 </tr>
               </thead>
 
@@ -529,9 +631,10 @@ export default function PagosPage() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="
-                        px-6 py-12 text-center
+                        px-6 py-12
+                        text-center
                         text-slate-500
                       "
                     >
@@ -541,86 +644,127 @@ export default function PagosPage() {
                 )}
 
                 {!loading &&
-                  pagosVisibles.map((pago) => (
-                    <tr
-                      key={pago.id}
-                      onClick={() =>
-                        navigate(
-                          `/participantes/${pago.id_participante}?tab=pagos`,
-                        )
-                      }
-                      className="
-                        cursor-pointer
-                        border-b border-slate-100
-                        transition-colors
-                        hover:bg-[#FFF5F9]
-                      "
-                    >
-                      <td
+                  pagosVisibles.map(
+                    (pago) => (
+                      <tr
+                        key={pago.id}
+                        onClick={() =>
+                          navigate(
+                            `/participantes/${pago.id_participante}?tab=pagos`,
+                          )
+                        }
                         className="
-                          whitespace-nowrap px-6 py-5
-                          font-semibold text-slate-900
+                          cursor-pointer
+                          border-b
+                          border-slate-100
+                          transition-colors
+                          hover:bg-[#FFF5F9]
                         "
                       >
-                        {pago.participantes?.nombre}{" "}
-                        {pago.participantes?.apellido}
-                      </td>
+                        <td
+                          className="
+                            w-[88px]
+                            px-4 py-3
+                          "
+                        >
+                          <FotoParticipante
+                            path={
+                              pago
+                                .participantes
+                                ?.foto_perfil_path ??
+                              null
+                            }
+                            nombre={
+                              pago.participantes
+                                ? `${pago.participantes.nombre} ${pago.participantes.apellido}`
+                                : "Participante"
+                            }
+                          />
+                        </td>
 
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-600
-                        "
-                      >
-                        {pago.participantes?.ci ||
-                          "Sin registrar"}
-                      </td>
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            font-semibold
+                            text-slate-900
+                          "
+                        >
+                          {pago
+                            .participantes
+                            ?.nombre ??
+                            "Sin datos"}{" "}
+                          {pago
+                            .participantes
+                            ?.apellido ?? ""}
+                        </td>
 
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-700
-                        "
-                      >
-                        {meses[
-                          pago.mes_abonado - 1
-                        ] ?? "Sin registrar"}{" "}
-                        {pago.anio_abonado}
-                      </td>
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-600
+                          "
+                        >
+                          {FormatHelper.mostrarCedula(pago.participantes?.ci)}
+                        </td>
 
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-600
-                        "
-                      >
-                        {formatearFecha(
-                          pago.fecha_pago,
-                        )}
-                      </td>
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-700
+                          "
+                        >
+                          {meses[
+                            pago.mes_abonado -
+                              1
+                          ] ??
+                            "Sin registrar"}{" "}
+                          {pago.anio_abonado}
+                        </td>
 
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          font-semibold text-slate-900
-                        "
-                      >
-                        {pago.monto === null
-                          ? "Sin registrar"
-                          : formatearMonto(
-                              Number(pago.monto),
-                            )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-600
+                          "
+                        >
+                          {formatearFecha(
+                            pago.fecha_pago,
+                          )}
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            font-semibold
+                            text-slate-900
+                          "
+                        >
+                          {pago.monto === null
+                            ? "Sin registrar"
+                            : formatearMonto(
+                                Number(
+                                  pago.monto,
+                                ),
+                              )}
+                        </td>
+                      </tr>
+                    ),
+                  )}
 
                 {!loading &&
-                  pagosVisibles.length === 0 && (
+                  pagosVisibles.length ===
+                    0 && (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="
-                          px-6 py-12 text-center
+                          px-6 py-12
+                          text-center
                           text-slate-500
                         "
                       >
@@ -640,7 +784,9 @@ export default function PagosPage() {
           resultadosParticipantes
         }
         seleccionada={seleccionada}
-        busquedaPersona={busquedaPersona}
+        busquedaPersona={
+          busquedaPersona
+        }
         form={form}
         saving={saving}
         error={formError}
@@ -649,7 +795,9 @@ export default function PagosPage() {
           setSeleccionada(null);
           setFormError("");
         }}
-        onSelectParticipante={(participante) => {
+        onSelectParticipante={(
+          participante,
+        ) => {
           setSeleccionada(participante);
 
           setBusquedaPersona(
@@ -661,6 +809,67 @@ export default function PagosPage() {
         onFormChange={setForm}
         onClose={cerrarFormulario}
         onSubmit={guardar}
+      />
+    </div>
+  );
+}
+
+function FotoParticipante({
+  path,
+  nombre,
+}: {
+  path: string | null;
+  nombre: string;
+}) {
+  const [imageError, setImageError] =
+    useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [path]);
+
+  const fotoUrl = useMemo(() => {
+    if (!path) {
+      return null;
+    }
+
+    const { data } = supabase.storage
+      .from(FOTO_BUCKET)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  }, [path]);
+
+  const src =
+    fotoUrl && !imageError
+      ? fotoUrl
+      : PLACEHOLDER_FOTO;
+
+  return (
+    <div
+      className="
+        h-12 w-12 shrink-0
+        overflow-hidden rounded-full
+        border-2 border-white
+        bg-pink-50 shadow-sm
+        ring-1 ring-slate-200
+      "
+    >
+      <img
+        src={src}
+        alt={`Foto de ${nombre}`}
+        loading="lazy"
+        onError={() => {
+          if (
+            src !== PLACEHOLDER_FOTO
+          ) {
+            setImageError(true);
+          }
+        }}
+        className="
+          h-full w-full
+          object-cover
+        "
       />
     </div>
   );
@@ -689,7 +898,8 @@ function Stat({
 
           <h2
             className={`
-              mt-3 text-4xl font-bold
+              mt-3 text-4xl
+              font-bold
               ${valueClass}
             `}
           >
@@ -699,8 +909,9 @@ function Stat({
 
         <div
           className={`
-            flex h-12 w-12 shrink-0
-            items-center justify-center
+            flex h-12 w-12
+            shrink-0 items-center
+            justify-center
             rounded-2xl
             ${iconBackground}
           `}
@@ -720,8 +931,9 @@ function TableHeader({
   return (
     <th
       className="
-        whitespace-nowrap px-6 py-4
-        text-sm font-semibold text-slate-700
+        whitespace-nowrap
+        px-6 py-4 text-sm
+        font-semibold text-slate-700
       "
     >
       {children}
@@ -750,17 +962,22 @@ function RegistrarPagoPanel({
   form: PagoForm;
   saving: boolean;
   error: string;
-  onBusquedaChange: (value: string) => void;
+  onBusquedaChange: (
+    value: string,
+  ) => void;
   onSelectParticipante: (
     participante: Participante,
   ) => void;
-  onFormChange: (form: PagoForm) => void;
+  onFormChange: (
+    form: PagoForm,
+  ) => void;
   onClose: () => void;
   onSubmit: (
     event: FormEvent<HTMLFormElement>,
   ) => void;
 }) {
-  const formularioHabilitado = Boolean(seleccionada);
+  const formularioHabilitado =
+    Boolean(seleccionada);
 
   return (
     <>
@@ -768,8 +985,10 @@ function RegistrarPagoPanel({
         onClick={onClose}
         className={`
           fixed inset-0 z-40
-          bg-slate-950/20 backdrop-blur-[1px]
-          transition-opacity duration-300
+          bg-slate-950/20
+          backdrop-blur-[1px]
+          transition-opacity
+          duration-300
           ${
             open
               ? "pointer-events-auto opacity-100"
@@ -782,11 +1001,14 @@ function RegistrarPagoPanel({
       <aside
         className={`
           fixed right-0 top-0 z-50
-          h-dvh w-full max-w-[760px]
+          h-dvh w-full
+          max-w-[760px]
           overflow-hidden
           border-l border-slate-200
-          bg-[#FFF5F9] shadow-2xl
-          transform-gpu will-change-transform
+          bg-[#FFF5F9]
+          shadow-2xl
+          transform-gpu
+          will-change-transform
           transition-transform
           duration-300 ease-out
           ${
@@ -800,18 +1022,23 @@ function RegistrarPagoPanel({
         <div className="flex h-full flex-col">
           <header
             className="
-              flex shrink-0 items-center
+              flex shrink-0
+              items-center
               justify-between
-              border-b border-slate-200
+              border-b
+              border-slate-200
               bg-white px-6 py-5
             "
           >
             <div className="flex items-center gap-4">
               <div
                 className="
-                  flex h-12 w-12 items-center
-                  justify-center rounded-2xl
-                  bg-pink-100 text-pink-700
+                  flex h-12 w-12
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  bg-pink-100
+                  text-pink-700
                 "
               >
                 <Wallet className="h-6 w-6" />
@@ -823,8 +1050,8 @@ function RegistrarPagoPanel({
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Seleccioná una participante y completá
-                  los datos.
+                  Seleccioná una participante
+                  y completá los datos.
                 </p>
               </div>
             </div>
@@ -834,11 +1061,13 @@ function RegistrarPagoPanel({
               onClick={onClose}
               disabled={saving}
               className="
-                rounded-full p-2 text-slate-500
+                rounded-full p-2
+                text-slate-500
                 transition-colors
                 hover:bg-slate-100
                 hover:text-slate-900
-                focus:outline-none focus:ring-4
+                focus:outline-none
+                focus:ring-4
                 focus:ring-pink-100
                 disabled:cursor-not-allowed
                 disabled:opacity-50
@@ -859,7 +1088,8 @@ function RegistrarPagoPanel({
             <div
               className="
                 flex-1 overflow-y-auto
-                overscroll-contain px-6 py-6
+                overscroll-contain
+                px-6 py-6
               "
             >
               <Section
@@ -873,34 +1103,43 @@ function RegistrarPagoPanel({
                   required
                   label="Buscar participante"
                   value={busquedaPersona}
-                  onChange={onBusquedaChange}
+                  onChange={
+                    onBusquedaChange
+                  }
                   placeholder="Ingresá al menos 2 caracteres"
                 />
 
                 {!seleccionada &&
-                  busquedaPersona.trim().length >= 2 &&
-                  participantesEncontradas.length ===
-                    0 && (
+                  busquedaPersona
+                    .trim().length >= 2 &&
+                  participantesEncontradas
+                    .length === 0 && (
                     <div
                       className="
-                        rounded-2xl border
+                        rounded-2xl
+                        border
                         border-slate-200
-                        bg-[#F5F9FF] px-4 py-4
-                        text-sm text-slate-500
+                        bg-[#F5F9FF]
+                        px-4 py-4
+                        text-sm
+                        text-slate-500
                       "
                     >
-                      No se encontraron participantes.
+                      No se encontraron
+                      participantes.
                     </div>
                   )}
 
                 {!seleccionada &&
-                  participantesEncontradas.length >
-                    0 && (
+                  participantesEncontradas
+                    .length > 0 && (
                     <div className="flex flex-col gap-2">
                       {participantesEncontradas.map(
                         (participante) => (
                           <button
-                            key={participante.id}
+                            key={
+                              participante.id
+                            }
                             type="button"
                             onClick={() =>
                               onSelectParticipante(
@@ -908,10 +1147,12 @@ function RegistrarPagoPanel({
                               )
                             }
                             className="
-                              rounded-2xl border
+                              rounded-2xl
+                              border
                               border-slate-200
-                              bg-[#F5F9FF] p-4
-                              text-left shadow-sm
+                              bg-[#F5F9FF]
+                              p-4 text-left
+                              shadow-sm
                               transition-colors
                               hover:border-pink-300
                               hover:bg-white
@@ -921,12 +1162,19 @@ function RegistrarPagoPanel({
                             "
                           >
                             <p className="font-semibold text-slate-900">
-                              {participante.nombre}{" "}
-                              {participante.apellido}
+                              {
+                                participante.nombre
+                              }{" "}
+                              {
+                                participante.apellido
+                              }
                             </p>
 
                             <p className="mt-1 text-sm text-slate-500">
-                              CI: {participante.ci}
+                              CI:{" "}
+                              {FormatHelper.mostrarCedula(
+                                participante.ci,
+                              )}
                             </p>
 
                             {participante.telefono && (
@@ -946,20 +1194,30 @@ function RegistrarPagoPanel({
                 {seleccionada && (
                   <div
                     className="
-                      flex items-center justify-between
-                      gap-4 rounded-2xl
-                      border border-pink-200
-                      bg-pink-50 px-4 py-4
+                      flex items-center
+                      justify-between gap-4
+                      rounded-2xl
+                      border
+                      border-pink-200
+                      bg-pink-50
+                      px-4 py-4
                     "
                   >
                     <div>
                       <p className="font-semibold text-slate-900">
-                        {seleccionada.nombre}{" "}
-                        {seleccionada.apellido}
+                        {
+                          seleccionada.nombre
+                        }{" "}
+                        {
+                          seleccionada.apellido
+                        }
                       </p>
 
                       <p className="mt-1 text-sm text-slate-600">
-                        CI: {seleccionada.ci}
+                        CI:{" "}
+                        {FormatHelper.mostrarCedula(
+                          seleccionada.ci,
+                        )}
                       </p>
                     </div>
 
@@ -972,9 +1230,15 @@ function RegistrarPagoPanel({
                 className={
                   formularioHabilitado
                     ? ""
-                    : "pointer-events-none select-none opacity-40"
+                    : `
+                      pointer-events-none
+                      select-none
+                      opacity-40
+                    `
                 }
-                aria-disabled={!formularioHabilitado}
+                aria-disabled={
+                  !formularioHabilitado
+                }
               >
                 <Section
                   title="Datos del pago"
@@ -985,7 +1249,8 @@ function RegistrarPagoPanel({
                 >
                   <div
                     className="
-                      grid grid-cols-1 gap-4
+                      grid grid-cols-1
+                      gap-4
                       sm:grid-cols-2
                     "
                   >
@@ -993,11 +1258,14 @@ function RegistrarPagoPanel({
                       required
                       label="Fecha de pago"
                       type="date"
-                      value={form.fecha_pago}
+                      value={
+                        form.fecha_pago
+                      }
                       onChange={(value) =>
                         onFormChange({
                           ...form,
-                          fecha_pago: value,
+                          fecha_pago:
+                            value,
                         })
                       }
                     />
@@ -1020,22 +1288,29 @@ function RegistrarPagoPanel({
                     <Select
                       required
                       label="Mes abonado"
-                      value={form.mes_abonado}
+                      value={
+                        form.mes_abonado
+                      }
                       onChange={(value) =>
                         onFormChange({
                           ...form,
-                          mes_abonado: value,
+                          mes_abonado:
+                            value,
                         })
                       }
                     >
-                      {meses.map((mes, index) => (
-                        <option
-                          key={mes}
-                          value={index + 1}
-                        >
-                          {mes}
-                        </option>
-                      ))}
+                      {meses.map(
+                        (mes, index) => (
+                          <option
+                            key={mes}
+                            value={
+                              index + 1
+                            }
+                          >
+                            {mes}
+                          </option>
+                        ),
+                      )}
                     </Select>
 
                     <Input
@@ -1044,11 +1319,14 @@ function RegistrarPagoPanel({
                       type="number"
                       min="2000"
                       max="2100"
-                      value={form.anio_abonado}
+                      value={
+                        form.anio_abonado
+                      }
                       onChange={(value) =>
                         onFormChange({
                           ...form,
-                          anio_abonado: value,
+                          anio_abonado:
+                            value,
                         })
                       }
                     />
@@ -1056,11 +1334,14 @@ function RegistrarPagoPanel({
 
                   <Textarea
                     label="Observaciones"
-                    value={form.observaciones}
+                    value={
+                      form.observaciones
+                    }
                     onChange={(value) =>
                       onFormChange({
                         ...form,
-                        observaciones: value,
+                        observaciones:
+                          value,
                       })
                     }
                     placeholder="Información adicional del pago"
@@ -1071,9 +1352,14 @@ function RegistrarPagoPanel({
               {error && (
                 <div
                   className="
-                    rounded-2xl border border-red-200
-                    bg-red-50 px-4 py-3
-                    text-sm font-medium text-red-700
+                    rounded-2xl
+                    border
+                    border-red-200
+                    bg-red-50
+                    px-4 py-3
+                    text-sm
+                    font-medium
+                    text-red-700
                   "
                 >
                   {error}
@@ -1083,9 +1369,11 @@ function RegistrarPagoPanel({
 
             <footer
               className="
-                flex shrink-0 items-center
+                flex shrink-0
+                items-center
                 justify-end gap-3
-                border-t border-slate-200
+                border-t
+                border-slate-200
                 bg-white px-6 py-5
               "
             >
@@ -1094,9 +1382,12 @@ function RegistrarPagoPanel({
                 onClick={onClose}
                 disabled={saving}
                 className="
-                  rounded-2xl border
-                  border-slate-300 bg-white
-                  px-5 py-3 font-semibold
+                  rounded-2xl
+                  border
+                  border-slate-300
+                  bg-white
+                  px-5 py-3
+                  font-semibold
                   text-slate-700
                   transition-colors
                   hover:bg-slate-50
@@ -1112,11 +1403,17 @@ function RegistrarPagoPanel({
 
               <button
                 type="submit"
-                disabled={!seleccionada || saving}
+                disabled={
+                  !seleccionada ||
+                  saving
+                }
                 className="
-                  rounded-2xl bg-pink-600
-                  px-6 py-3 font-semibold
-                  text-white shadow-sm
+                  rounded-2xl
+                  bg-pink-600
+                  px-6 py-3
+                  font-semibold
+                  text-white
+                  shadow-sm
                   transition-colors
                   hover:bg-pink-700
                   focus:outline-none
@@ -1156,23 +1453,27 @@ function Section({
       className="
         mb-6 overflow-hidden
         rounded-3xl border
-        border-slate-200 bg-white
-        shadow-sm
+        border-slate-200
+        bg-white shadow-sm
       "
     >
       <div
         className="
           flex items-center gap-3
-          border-b border-slate-200
-          bg-[#F5FFFB] px-5 py-4
+          border-b
+          border-slate-200
+          bg-[#F5FFFB]
+          px-5 py-4
         "
       >
         <div
           className="
-            flex h-10 w-10 shrink-0
-            items-center justify-center
+            flex h-10 w-10
+            shrink-0 items-center
+            justify-center
             rounded-xl bg-white
-            text-pink-600 shadow-sm
+            text-pink-600
+            shadow-sm
           "
         >
           {icon}
@@ -1209,7 +1510,10 @@ function FieldLabel({
 
       {required && (
         <span
-          className="ml-1 font-bold text-red-600"
+          className="
+            ml-1 font-bold
+            text-red-600
+          "
           aria-hidden="true"
         >
           *
@@ -1232,7 +1536,9 @@ function Input({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   type?: string;
   required?: boolean;
   placeholder?: string;
@@ -1256,12 +1562,16 @@ function Input({
         max={max}
         step={step}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
           rounded-2xl border
-          border-slate-300 bg-[#F5F9FF]
-          px-4 py-3 text-slate-900
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
           shadow-sm outline-none
           transition-colors
           placeholder:text-slate-400
@@ -1284,7 +1594,9 @@ function Textarea({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   placeholder?: string;
 }) {
   return (
@@ -1296,14 +1608,20 @@ function Textarea({
         rows={4}
         placeholder={placeholder}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
-          resize-y rounded-2xl
-          border border-slate-300
-          bg-[#F5F9FF] px-4 py-3
-          text-slate-900 shadow-sm
-          outline-none transition-colors
+          resize-y
+          rounded-2xl
+          border
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
+          shadow-sm outline-none
+          transition-colors
           placeholder:text-slate-400
           hover:border-slate-400
           focus:border-pink-400
@@ -1325,7 +1643,9 @@ function Select({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   children: ReactNode;
   required?: boolean;
 }) {
@@ -1340,12 +1660,16 @@ function Select({
         value={value}
         required={required}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
           rounded-2xl border
-          border-slate-300 bg-[#F5F9FF]
-          px-4 py-3 text-slate-900
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
           shadow-sm outline-none
           transition-colors
           hover:border-slate-400

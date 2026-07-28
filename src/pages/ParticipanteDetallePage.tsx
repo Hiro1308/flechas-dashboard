@@ -1,6 +1,8 @@
 import {
   useEffect,
+  useRef,
   useState,
+  type ChangeEvent,
   type ReactNode,
 } from "react";
 import {
@@ -12,6 +14,8 @@ import {
   ClipboardList,
   FileText,
   HeartPulse,
+  LoaderCircle,
+  Pencil,
   Save,
   User,
   Wallet,
@@ -25,8 +29,8 @@ import {
 import ArchivosParticipante, {
   type ArchivoParticipante,
 } from "../components/participantes/ArchivosParticipante";
-
 import Card from "../components/ui/Card";
+import FormatHelper from "../helpers/FormatHelper";
 import { supabase } from "../services/supabase";
 
 type Tab =
@@ -59,6 +63,7 @@ type Participante = {
   desarrolla_linfedema: boolean | null;
   miembro_afectado: string | null;
   observaciones: string | null;
+  foto_perfil_path: string | null;
 };
 
 type Pago = {
@@ -83,7 +88,8 @@ type FieldType =
   | "email"
   | "date"
   | "textarea"
-  | "select";
+  | "select"
+  | "cedula";
 
 type FieldOption = {
   label: string;
@@ -99,6 +105,9 @@ type EditableField = {
 };
 
 type EditableValues = Record<string, string>;
+
+const FOTO_BUCKET = "fotos-participantes";
+const MAX_FOTO_SIZE = 5 * 1024 * 1024;
 
 const meses = [
   "Enero",
@@ -175,9 +184,7 @@ function formatearHora(
     return "—";
   }
 
-  if (
-    /^\d{2}:\d{2}/.test(value)
-  ) {
+  if (/^\d{2}:\d{2}/.test(value)) {
     return value.slice(0, 5);
   }
 
@@ -206,6 +213,51 @@ function formatearHorario(
     : `${horaInicio} - ${horaFin}`;
 }
 
+function obtenerUrlFoto(
+  path?: string | null,
+) {
+  if (!path) {
+    return null;
+  }
+
+  const { data } = supabase.storage
+    .from(FOTO_BUCKET)
+    .getPublicUrl(path);
+
+  return data.publicUrl;
+}
+
+function obtenerExtensionFoto(
+  archivo: File,
+) {
+  const extensionNombre = archivo.name
+    .split(".")
+    .pop()
+    ?.toLowerCase();
+
+  if (
+    extensionNombre &&
+    ["jpg", "jpeg", "png", "webp"].includes(
+      extensionNombre,
+    )
+  ) {
+    return extensionNombre === "jpeg"
+      ? "jpg"
+      : extensionNombre;
+  }
+
+  switch (archivo.type) {
+    case "image/png":
+      return "png";
+
+    case "image/webp":
+      return "webp";
+
+    default:
+      return "jpg";
+  }
+}
+
 const participanteToEditableValues = (
   participante: Participante,
   fields: EditableField[],
@@ -214,6 +266,17 @@ const participanteToEditableValues = (
 
   fields.forEach((field) => {
     const value = participante[field.key];
+
+    if (field.type === "cedula") {
+      values[field.key] =
+        FormatHelper.formatearCedula(
+          value == null
+            ? ""
+            : String(value),
+        );
+
+      return;
+    }
 
     if (typeof value === "boolean") {
       values[field.key] = value
@@ -256,6 +319,9 @@ export default function ParticipanteDetallePage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
+  const fotoInputRef =
+    useRef<HTMLInputElement>(null);
+
   const [
     searchParams,
     setSearchParams,
@@ -289,8 +355,8 @@ export default function ParticipanteDetallePage() {
   ] = useState<Asistencia[]>([]);
 
   const [archivos, setArchivos] = useState<
-  ArchivoParticipante[]
->([]);
+    ArchivoParticipante[]
+  >([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -299,6 +365,15 @@ export default function ParticipanteDetallePage() {
     useState<string | null>(null);
 
   const [changingStatus, setChangingStatus] =
+    useState(false);
+
+  const [uploadingPhoto, setUploadingPhoto] =
+    useState(false);
+
+  const [photoVersion, setPhotoVersion] =
+    useState(0);
+
+  const [imageError, setImageError] =
     useState(false);
 
   const [error, setError] = useState("");
@@ -388,13 +463,26 @@ export default function ParticipanteDetallePage() {
         );
 
         setArchivos(
-  (archivosData ?? []) as ArchivoParticipante[],
-);
+          (archivosData ??
+            []) as ArchivoParticipante[],
+        );
       }
 
       setLoading(false);
     })();
   }, [id]);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [participante?.foto_perfil_path]);
+
+  const mostrarExito = (message: string) => {
+    setSuccess(message);
+
+    window.setTimeout(() => {
+      setSuccess("");
+    }, 3000);
+  };
 
   const guardarParticipante = async (
     cardId: string,
@@ -419,7 +507,12 @@ export default function ParticipanteDetallePage() {
       .single();
 
     if (updateError) {
-      setError(updateError.message);
+      setError(
+        updateError.code === "23505"
+          ? "Ya existe una participante con esa cédula."
+          : updateError.message,
+      );
+
       setSavingCard(null);
 
       return false;
@@ -427,17 +520,135 @@ export default function ParticipanteDetallePage() {
 
     setParticipante(data as Participante);
 
-    setSuccess(
+    mostrarExito(
       "Los cambios se guardaron correctamente.",
     );
 
     setSavingCard(null);
 
-    window.setTimeout(() => {
-      setSuccess("");
-    }, 3000);
-
     return true;
+  };
+
+  const subirFotoPerfil = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const archivo = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!archivo || !id || !participante) {
+      return;
+    }
+
+    const formatosPermitidos = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (
+      !formatosPermitidos.includes(archivo.type)
+    ) {
+      setError(
+        "La foto debe estar en formato JPG, PNG o WEBP.",
+      );
+
+      return;
+    }
+
+    if (archivo.size > MAX_FOTO_SIZE) {
+      setError(
+        "La foto no puede superar los 5 MB.",
+      );
+
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setError("");
+    setSuccess("");
+
+    const extension =
+      obtenerExtensionFoto(archivo);
+
+    const nuevaRuta =
+      `participantes/${id}/perfil-` +
+      `${Date.now()}.${extension}`;
+
+    const rutaAnterior =
+      participante.foto_perfil_path;
+
+    try {
+      const { error: uploadError } =
+        await supabase.storage
+          .from(FOTO_BUCKET)
+          .upload(nuevaRuta, archivo, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: archivo.type,
+          });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: participanteActualizado,
+        error: updateError,
+      } = await supabase
+        .from("participantes")
+        .update({
+          foto_perfil_path: nuevaRuta,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (updateError) {
+        await supabase.storage
+          .from(FOTO_BUCKET)
+          .remove([nuevaRuta]);
+
+        throw updateError;
+      }
+
+      setParticipante(
+        participanteActualizado as Participante,
+      );
+
+      setImageError(false);
+      setPhotoVersion(Date.now());
+
+      if (
+        rutaAnterior &&
+        rutaAnterior !== nuevaRuta
+      ) {
+        const { error: removeError } =
+          await supabase.storage
+            .from(FOTO_BUCKET)
+            .remove([rutaAnterior]);
+
+        if (removeError) {
+          console.error(
+            "No se pudo borrar la foto anterior:",
+            removeError,
+          );
+        }
+      }
+
+      mostrarExito(
+        "La foto de perfil se actualizó correctamente.",
+      );
+    } catch (uploadError) {
+      const message =
+        uploadError instanceof Error
+          ? uploadError.message
+          : "No se pudo actualizar la foto.";
+
+      setError(message);
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const darBaja = async () => {
@@ -483,17 +694,13 @@ export default function ParticipanteDetallePage() {
 
     setParticipante(data as Participante);
 
-    setSuccess(
+    mostrarExito(
       nuevoEstado === "baja"
         ? "La participante fue dada de baja."
         : "La participante fue reactivada.",
     );
 
     setChangingStatus(false);
-
-    window.setTimeout(() => {
-      setSuccess("");
-    }, 3000);
   };
 
   if (loading) {
@@ -524,6 +731,18 @@ export default function ParticipanteDetallePage() {
     );
   }
 
+  const fotoPublica = obtenerUrlFoto(
+    participante.foto_perfil_path,
+  );
+
+  const fotoUrl =
+    fotoPublica && photoVersion
+      ? `${fotoPublica}?v=${photoVersion}`
+      : fotoPublica;
+
+  const mostrarFoto =
+    Boolean(fotoUrl) && !imageError;
+
   return (
     <div className="flex flex-col gap-6">
       <div
@@ -551,7 +770,6 @@ export default function ParticipanteDetallePage() {
           "
         >
           <ArrowLeft className="h-4 w-4" />
-
           Volver
         </button>
 
@@ -625,25 +843,150 @@ export default function ParticipanteDetallePage() {
             xl:justify-between
           "
         >
-          <div className="flex items-center gap-5">
-            <div
-              title="Participante"
-              aria-label="Participante"
-              className="
-                flex h-20 w-20 shrink-0
-                items-center justify-center
-                rounded-3xl bg-pink-100
-                text-pink-600
-              "
-            >
-              <User className="h-10 w-10" />
+          <div
+            className="
+              flex flex-col items-center gap-5
+              sm:flex-row sm:items-center
+            "
+          >
+            <div className="relative shrink-0">
+              <input
+                ref={fotoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) =>
+                  void subirFotoPerfil(event)
+                }
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                title={
+                  participante.foto_perfil_path
+                    ? "Cambiar foto de perfil"
+                    : "Agregar foto de perfil"
+                }
+                aria-label={
+                  participante.foto_perfil_path
+                    ? "Cambiar foto de perfil"
+                    : "Agregar foto de perfil"
+                }
+                disabled={uploadingPhoto}
+                onClick={() =>
+                  fotoInputRef.current?.click()
+                }
+                className="
+                  group relative block
+                  h-30 w-30 cursor-pointer
+                  rounded-full
+                  focus:outline-none
+                  focus:ring-4
+                  focus:ring-pink-200
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                "
+              >
+                <div
+                  className="
+                    absolute left-0 top-0
+                    h-28 w-28
+                    overflow-hidden rounded-full
+                    border-4 border-white
+                    bg-pink-100
+                    shadow-md ring-1
+                    ring-slate-200
+                    transition
+                    group-hover:scale-[1.02]
+                    group-hover:ring-pink-300
+                  "
+                >
+                  <img
+                    src={
+                      mostrarFoto
+                        ? fotoUrl ?? undefined
+                        : "/placeholder_person.png"
+                    }
+                    alt={
+                      mostrarFoto
+                        ? `Foto de ${participante.nombre} ${participante.apellido}`
+                        : "Foto de perfil sin cargar"
+                    }
+                    onError={() => {
+                      if (mostrarFoto) {
+                        setImageError(true);
+                      }
+                    }}
+                    className="
+                      h-full w-full
+                      object-cover
+                    "
+                  />
+
+                  <div
+                    className="
+                      absolute inset-0
+                      bg-slate-900/0
+                      transition-colors
+                      group-hover:bg-slate-900/10
+                    "
+                  />
+
+                  {uploadingPhoto && (
+                    <div
+                      className="
+                        absolute inset-0
+                        flex items-center
+                        justify-center
+                        bg-slate-900/55
+                        text-white
+                      "
+                    >
+                      <LoaderCircle
+                        className="
+                          h-8 w-8
+                          animate-spin
+                        "
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className="
+                    absolute bottom-1 right-1
+                    z-10
+                    flex h-10 w-10
+                    items-center justify-center
+                    rounded-full border-4
+                    border-white
+                    bg-pink-600
+                    text-white
+                    shadow-md
+                    transition-colors
+                    group-hover:bg-pink-700
+                  "
+                >
+                  {uploadingPhoto ? (
+                    <LoaderCircle
+                      className="
+                        h-4 w-4
+                        animate-spin
+                      "
+                    />
+                  ) : (
+                    <Pencil className="h-4 w-4" />
+                  )}
+                </div>
+              </button>
             </div>
 
-            <div>
+            <div className="text-center sm:text-left">
               <div
                 className="
                   flex flex-wrap items-center
-                  gap-3
+                  justify-center gap-3
+                  sm:justify-start
                 "
               >
                 <h1 className="text-3xl font-bold text-slate-900">
@@ -677,8 +1020,15 @@ export default function ParticipanteDetallePage() {
               </div>
 
               <p className="mt-2 text-slate-500">
-                CI: {participante.ci} ·{" "}
-                {participante.tipo_participante}
+                CI:{" "}
+                {FormatHelper.mostrarCedula(
+                  participante.ci,
+                )}{" "}
+                · {participante.tipo_participante}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-400">
+                JPG, PNG o WEBP · máximo 5 MB
               </p>
             </div>
           </div>
@@ -813,7 +1163,6 @@ export default function ParticipanteDetallePage() {
                 `}
               >
                 {icon}
-
                 {label}
               </button>
             ),
@@ -851,7 +1200,8 @@ export default function ParticipanteDetallePage() {
               {
                 key: "ci",
                 label: "Cédula",
-                placeholder: "Cédula",
+                type: "cedula",
+                placeholder: "1.234.567-8",
               },
               {
                 key: "telefono",
@@ -890,22 +1240,31 @@ export default function ParticipanteDetallePage() {
                 {
                   nombre:
                     values.nombre.trim(),
+
                   apellido:
                     values.apellido.trim(),
-                  ci: values.ci.trim(),
+
+                  ci: FormatHelper.limpiarCedula(
+                    values.ci,
+                  ),
+
                   telefono: cleanTextValue(
                     values.telefono,
                   ),
+
                   telefono_alternativo:
                     cleanTextValue(
                       values.telefono_alternativo,
                     ),
+
                   email: cleanTextValue(
                     values.email,
                   ),
+
                   direccion: cleanTextValue(
                     values.direccion,
                   ),
+
                   ocupacion: cleanTextValue(
                     values.ocupacion,
                   ),
@@ -970,7 +1329,9 @@ export default function ParticipanteDetallePage() {
                 {
                   tipo_participante:
                     values.tipo_participante,
+
                   estado: values.estado,
+
                   fecha_ingreso:
                     values.fecha_ingreso,
                 },
@@ -1024,15 +1385,18 @@ export default function ParticipanteDetallePage() {
                     cleanTextValue(
                       values.prestador_salud,
                     ),
+
                   emergencia_movil:
                     cleanTextValue(
                       values.emergencia_movil,
                     ),
+
                   fecha_cirugia:
                     values.fecha_cirugia ===
                     ""
                       ? null
                       : values.fecha_cirugia,
+
                   tipo_cirugia:
                     cleanTextValue(
                       values.tipo_cirugia,
@@ -1133,29 +1497,35 @@ export default function ParticipanteDetallePage() {
                       ? null
                       : values.hta ===
                         "true",
+
                   diabetes:
                     values.diabetes === ""
                       ? null
                       : values.diabetes ===
                         "true",
+
                   alergias:
                     cleanTextValue(
                       values.alergias,
                     ),
+
                   otros_antecedentes:
                     cleanTextValue(
                       values.otros_antecedentes,
                     ),
+
                   desarrolla_linfedema:
                     values.desarrolla_linfedema ===
                     ""
                       ? null
                       : values.desarrolla_linfedema ===
                         "true",
+
                   miembro_afectado:
                     cleanTextValue(
                       values.miembro_afectado,
                     ),
+
                   observaciones:
                     cleanTextValue(
                       values.observaciones,
@@ -1179,14 +1549,17 @@ export default function ParticipanteDetallePage() {
             `${
               meses[pago.mes_abonado - 1]
             } ${pago.anio_abonado}`,
+
             formatearFecha(
               pago.fecha_pago,
             ),
+
             pago.monto == null
               ? "Sin registrar"
               : `$${Number(
                   pago.monto,
                 ).toLocaleString("es-US")}`,
+
             pago.observaciones ||
               "Sin observaciones",
           ])}
@@ -1206,13 +1579,16 @@ export default function ParticipanteDetallePage() {
               formatearFecha(
                 asistencia.fecha,
               ),
+
               formatearHora(
                 asistencia.fecha,
               ),
+
               formatearHorario(
                 asistencia.hora_inicio_snapshot,
                 asistencia.hora_fin_snapshot,
               ),
+
               asistencia.observaciones ||
                 "Sin observaciones",
             ],
@@ -1221,12 +1597,12 @@ export default function ParticipanteDetallePage() {
       )}
 
       {tab === "archivos" && id && (
-  <ArchivosParticipante
-    idParticipante={id}
-    archivos={archivos}
-    onChange={setArchivos}
-  />
-)}
+        <ArchivosParticipante
+          idParticipante={id}
+          archivos={archivos}
+          onChange={setArchivos}
+        />
+      )}
     </div>
   );
 }
@@ -1339,6 +1715,14 @@ function EditableInfoCard({
     values,
   );
 
+  const cedulaInvalida = fields.some(
+    (field) =>
+      field.type === "cedula" &&
+      !FormatHelper.cedulaCompleta(
+        values[field.key] ?? "",
+      ),
+  );
+
   const handleChange = (
     key: keyof Participante,
     value: string,
@@ -1350,12 +1734,28 @@ function EditableInfoCard({
   };
 
   const handleSave = async () => {
+    if (cedulaInvalida) {
+      return;
+    }
+
     const saved = await onSave(values);
 
     if (saved) {
-      setSavedValues({
+      const nextSavedValues = {
         ...values,
+      };
+
+      fields.forEach((field) => {
+        if (field.type === "cedula") {
+          nextSavedValues[field.key] =
+            FormatHelper.formatearCedula(
+              values[field.key] ?? "",
+            );
+        }
       });
+
+      setSavedValues(nextSavedValues);
+      setValues(nextSavedValues);
     }
   };
 
@@ -1415,7 +1815,10 @@ function EditableInfoCard({
           <div className="mt-6 flex justify-end">
             <button
               type="button"
-              disabled={saving}
+              disabled={
+                saving ||
+                cedulaInvalida
+              }
               onClick={() =>
                 void handleSave()
               }
@@ -1430,7 +1833,9 @@ function EditableInfoCard({
                 focus:ring-4
                 focus:ring-pink-200
                 disabled:cursor-not-allowed
-                disabled:opacity-60
+                disabled:bg-slate-300
+                disabled:text-slate-500
+                disabled:shadow-none
               "
             >
               <Save className="h-4 w-4" />
@@ -1455,6 +1860,16 @@ function EditableInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const cedulaConContenido =
+    field.type === "cedula" &&
+    FormatHelper.limpiarCedula(value).length >
+      0;
+
+  const cedulaInvalida =
+    field.type === "cedula" &&
+    cedulaConContenido &&
+    !FormatHelper.cedulaCompleta(value);
+
   const baseClassName = `
     mt-2 w-full rounded-2xl
     border border-slate-300
@@ -1505,6 +1920,51 @@ function EditableInput({
             ),
           )}
         </select>
+      ) : field.type === "cedula" ? (
+        <>
+          <input
+            type="text"
+            value={value}
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={11}
+            placeholder={
+              field.placeholder ??
+              "1.234.567-8"
+            }
+            aria-invalid={cedulaInvalida}
+            onChange={(event) => {
+              onChange(
+                FormatHelper.formatearCedula(
+                  event.target.value,
+                ),
+              );
+            }}
+            className={`
+              ${baseClassName}
+              ${
+                cedulaInvalida
+                  ? `
+                    border-red-400
+                    focus:border-red-400
+                    focus:ring-red-100
+                  `
+                  : ""
+              }
+            `}
+          />
+
+          {cedulaInvalida && (
+            <span
+              className="
+                mt-2 block text-xs
+                font-medium text-red-600
+              "
+            >
+              La cédula debe contener 8 números.
+            </span>
+          )}
+        </>
       ) : (
         <input
           type={field.type ?? "text"}

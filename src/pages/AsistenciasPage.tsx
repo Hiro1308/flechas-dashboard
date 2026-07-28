@@ -20,6 +20,8 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/ui/Card";
 import { supabase } from "../services/supabase";
 
+import FormatHelper from "../helpers/FormatHelper";
+
 type Participante = {
   id: string;
   nombre: string;
@@ -48,6 +50,7 @@ type Asistencia = {
     nombre: string;
     apellido: string;
     ci: string;
+    foto_perfil_path: string | null;
   } | null;
 };
 
@@ -57,6 +60,11 @@ type AsistenciaForm = {
   id_horario_clase: string;
   observaciones: string;
 };
+
+const FOTO_BUCKET = "fotos-participantes";
+
+const PLACEHOLDER_FOTO =
+  "/placeholder_person.png";
 
 const diasSemana: Record<number, string> = {
   0: "Domingo",
@@ -74,7 +82,9 @@ function obtenerFechaLocal() {
   const diferenciaZonaHoraria =
     fecha.getTimezoneOffset() * 60_000;
 
-  return new Date(fecha.getTime() - diferenciaZonaHoraria)
+  return new Date(
+    fecha.getTime() - diferenciaZonaHoraria,
+  )
     .toISOString()
     .slice(0, 10);
 }
@@ -82,9 +92,13 @@ function obtenerFechaLocal() {
 function obtenerHoraLocal() {
   const fecha = new Date();
 
-  return `${String(fecha.getHours()).padStart(2, "0")}:${String(
-    fecha.getMinutes(),
-  ).padStart(2, "0")}`;
+  return `${String(fecha.getHours()).padStart(
+    2,
+    "0",
+  )}:${String(fecha.getMinutes()).padStart(
+    2,
+    "0",
+  )}`;
 }
 
 function crearFormularioInicial(): AsistenciaForm {
@@ -106,7 +120,9 @@ function formatearFecha(value: string) {
 
 function formatearHora(value: string | Date) {
   const fecha =
-    typeof value === "string" ? new Date(value) : value;
+    typeof value === "string"
+      ? new Date(value)
+      : value;
 
   return new Intl.DateTimeFormat("es-UY", {
     hour: "2-digit",
@@ -116,7 +132,9 @@ function formatearHora(value: string | Date) {
   }).format(fecha);
 }
 
-function normalizarHora(value?: string | null) {
+function normalizarHora(
+  value?: string | null,
+) {
   if (!value) {
     return "";
   }
@@ -128,7 +146,8 @@ function formatearRangoHorario(
   inicio?: string | null,
   fin?: string | null,
 ) {
-  const horaInicio = normalizarHora(inicio);
+  const horaInicio =
+    normalizarHora(inicio);
 
   if (!horaInicio) {
     return "Sin horario";
@@ -144,41 +163,65 @@ function formatearRangoHorario(
 export default function AsistenciasPage() {
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<Asistencia[]>([]);
-  const [participantes, setParticipantes] = useState<
-    Participante[]
-  >([]);
-  const [horarios, setHorarios] = useState<Horario[]>([]);
+  const [items, setItems] =
+    useState<Asistencia[]>([]);
 
-  const [showForm, setShowForm] = useState(false);
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaParticipante, setBusquedaParticipante] =
+  const [
+    participantes,
+    setParticipantes,
+  ] = useState<Participante[]>([]);
+
+  const [horarios, setHorarios] =
+    useState<Horario[]>([]);
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [busqueda, setBusqueda] =
     useState("");
+
+  const [
+    busquedaParticipante,
+    setBusquedaParticipante,
+  ] = useState("");
 
   const [seleccionada, setSeleccionada] =
     useState<Participante | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [pageError, setPageError] = useState("");
-  const [formError, setFormError] = useState("");
+  const [saving, setSaving] =
+    useState(false);
 
-  const [form, setForm] = useState<AsistenciaForm>(
-    crearFormularioInicial,
-  );
+  const [pageError, setPageError] =
+    useState("");
+
+  const [formError, setFormError] =
+    useState("");
+
+  const [form, setForm] =
+    useState<AsistenciaForm>(
+      crearFormularioInicial,
+    );
 
   const cargar = async () => {
     setLoading(true);
     setPageError("");
 
     const [
-      { data: asistenciasData, error: asistenciasError },
+      {
+        data: asistenciasData,
+        error: asistenciasError,
+      },
       {
         data: participantesData,
         error: participantesError,
       },
-      { data: horariosData, error: horariosError },
+      {
+        data: horariosData,
+        error: horariosError,
+      },
     ] = await Promise.all([
       supabase
         .from("asistencias")
@@ -194,7 +237,8 @@ export default function AsistenciasPage() {
             participantes (
               nombre,
               apellido,
-              ci
+              ci,
+              foto_perfil_path
             )
           `,
         )
@@ -258,7 +302,8 @@ export default function AsistenciasPage() {
       setHorarios([]);
     } else {
       setItems(
-        (asistenciasData ?? []) as unknown as Asistencia[],
+        (asistenciasData ??
+          []) as unknown as Asistencia[],
       );
 
       setParticipantes(
@@ -267,7 +312,8 @@ export default function AsistenciasPage() {
       );
 
       setHorarios(
-        (horariosData ?? []) as unknown as Horario[],
+        (horariosData ??
+          []) as unknown as Horario[],
       );
     }
 
@@ -278,69 +324,103 @@ export default function AsistenciasPage() {
     void cargar();
   }, []);
 
-  const asistenciasVisibles = useMemo(() => {
-    const textoBusqueda = busqueda
-      .trim()
-      .toLowerCase();
-
-    if (!textoBusqueda) {
-      return items;
-    }
-
-    return items.filter((asistencia) => {
-      const textoAsistencia = [
-        asistencia.participantes?.nombre ?? "",
-        asistencia.participantes?.apellido ?? "",
-        asistencia.participantes?.ci ?? "",
-        asistencia.observaciones ?? "",
-      ]
-        .join(" ")
+  const asistenciasVisibles = useMemo(
+    () => {
+      const textoBusqueda = busqueda
+        .trim()
         .toLowerCase();
 
-      return textoAsistencia.includes(textoBusqueda);
-    });
-  }, [busqueda, items]);
+      if (!textoBusqueda) {
+        return items;
+      }
 
-  const participantesEncontradas = useMemo(() => {
-    const textoBusqueda = busquedaParticipante
-      .trim()
-      .toLowerCase();
+      return items.filter(
+        (asistencia) => {
+          const coincideTexto = [
+            asistencia.participantes
+              ?.nombre ?? "",
+            asistencia.participantes
+              ?.apellido ?? "",
+            asistencia.observaciones ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(textoBusqueda);
 
-    if (textoBusqueda.length < 2) {
-      return [];
-    }
+          const coincideCedula =
+            FormatHelper.cedulaIncluyeBusqueda(
+              asistencia.participantes?.ci,
+              busqueda,
+            );
 
-    return participantes
-      .filter((participante) => {
-        const textoParticipante = [
-          participante.nombre,
-          participante.apellido,
-          participante.ci,
-          participante.telefono ?? "",
-        ]
-          .join(" ")
+          return (
+            coincideTexto ||
+            coincideCedula
+          );
+        },
+      );
+    },
+    [busqueda, items],
+  );
+
+  const participantesEncontradas =
+    useMemo(() => {
+      const textoBusqueda =
+        busquedaParticipante
+          .trim()
           .toLowerCase();
 
-        return textoParticipante.includes(textoBusqueda);
-      })
-      .slice(0, 6);
-  }, [busquedaParticipante, participantes]);
+      if (textoBusqueda.length < 2) {
+        return [];
+      }
+
+      return participantes
+        .filter((participante) => {
+          const coincideTexto = [
+            participante.nombre,
+            participante.apellido,
+            participante.telefono ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(textoBusqueda);
+
+          const coincideCedula =
+            FormatHelper.cedulaIncluyeBusqueda(
+              participante.ci,
+              busquedaParticipante,
+            );
+
+          return (
+            coincideTexto ||
+            coincideCedula
+          );
+        })
+        .slice(0, 6);
+    }, [
+      busquedaParticipante,
+      participantes,
+    ]);
 
   const estadisticas = useMemo(() => {
     const fechaHoy = obtenerFechaLocal();
 
     const asistenciasHoy = items.filter(
       (asistencia) =>
-        asistencia.fecha.slice(0, 10) === fechaHoy,
+        asistencia.fecha.slice(0, 10) ===
+        fechaHoy,
     );
 
-    const ultimoRegistro = items[0]?.fecha
-      ? formatearHora(items[0].fecha)
-      : "—";
+    const ultimoRegistro =
+      items[0]?.fecha
+        ? formatearHora(items[0].fecha)
+        : "—";
 
     return {
-      asistenciasHoy: asistenciasHoy.length,
-      participantesActivas: participantes.length,
+      asistenciasHoy:
+        asistenciasHoy.length,
+      participantesActivas:
+        participantes.length,
       ultimoRegistro,
     };
   }, [items, participantes]);
@@ -376,7 +456,9 @@ export default function AsistenciasPage() {
     setFormError("");
   };
 
-  const seleccionarHorario = (horarioId: string) => {
+  const seleccionarHorario = (
+    horarioId: string,
+  ) => {
     const horario = horarios.find(
       (item) => item.id === horarioId,
     );
@@ -385,7 +467,9 @@ export default function AsistenciasPage() {
       ...formActual,
       id_horario_clase: horarioId,
       hora: horario
-        ? normalizarHora(horario.hora_inicio)
+        ? normalizarHora(
+            horario.hora_inicio,
+          )
         : formActual.hora,
     }));
   };
@@ -407,7 +491,9 @@ export default function AsistenciasPage() {
     setFormError("");
 
     const horario = horarios.find(
-      (item) => item.id === form.id_horario_clase,
+      (item) =>
+        item.id ===
+        form.id_horario_clase,
     );
 
     const fechaLocal = new Date(
@@ -417,15 +503,26 @@ export default function AsistenciasPage() {
     const { error } = await supabase
       .from("asistencias")
       .insert({
-        id_participante: seleccionada.id,
-        fecha: fechaLocal.toISOString(),
+        id_participante:
+          seleccionada.id,
+
+        fecha:
+          fechaLocal.toISOString(),
+
         observaciones:
-          form.observaciones.trim() || null,
-        id_horario_clase: horario?.id ?? null,
+          form.observaciones.trim() ||
+          null,
+
+        id_horario_clase:
+          horario?.id ?? null,
+
         dia_semana_snapshot:
           horario?.dia_semana ?? null,
+
         hora_inicio_snapshot:
-          horario?.hora_inicio ?? `${form.hora}:00`,
+          horario?.hora_inicio ??
+          `${form.hora}:00`,
+
         hora_fin_snapshot:
           horario?.hora_fin ?? null,
       });
@@ -473,7 +570,8 @@ export default function AsistenciasPage() {
             </h1>
 
             <p className="mt-2 text-slate-500">
-              Control de asistencia a clases y sesiones
+              Control de asistencia a clases
+              y sesiones
             </p>
           </div>
 
@@ -481,12 +579,15 @@ export default function AsistenciasPage() {
             type="button"
             onClick={abrirFormulario}
             className="
-              flex items-center justify-center gap-2
+              flex items-center
+              justify-center gap-2
               rounded-2xl bg-pink-600
-              px-5 py-3 font-semibold text-white
-              shadow-sm transition-colors
+              px-5 py-3 font-semibold
+              text-white shadow-sm
+              transition-colors
               hover:bg-pink-700
-              focus:outline-none focus:ring-4
+              focus:outline-none
+              focus:ring-4
               focus:ring-pink-200
             "
           >
@@ -526,7 +627,9 @@ export default function AsistenciasPage() {
 
           <Stat
             label="Último registro"
-            value={estadisticas.ultimoRegistro}
+            value={
+              estadisticas.ultimoRegistro
+            }
             icon={
               <Clock className="h-6 w-6 text-slate-600" />
             }
@@ -538,9 +641,10 @@ export default function AsistenciasPage() {
         {pageError && (
           <div
             className="
-              rounded-2xl border border-red-200
-              bg-red-50 px-4 py-3
-              text-sm text-red-700
+              rounded-2xl border
+              border-red-200 bg-red-50
+              px-4 py-3 text-sm
+              text-red-700
             "
           >
             {pageError}
@@ -563,7 +667,8 @@ export default function AsistenciasPage() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Asistencias efectivamente registradas
+                Asistencias efectivamente
+                registradas
               </p>
             </div>
 
@@ -571,7 +676,8 @@ export default function AsistenciasPage() {
               className="
                 flex items-center gap-3
                 rounded-2xl border
-                border-slate-300 bg-[#F5F9FF]
+                border-slate-300
+                bg-[#F5F9FF]
                 px-4 py-3 shadow-sm
                 transition-colors
                 focus-within:border-pink-400
@@ -586,12 +692,15 @@ export default function AsistenciasPage() {
                 type="search"
                 value={busqueda}
                 onChange={(event) =>
-                  setBusqueda(event.target.value)
+                  setBusqueda(
+                    event.target.value,
+                  )
                 }
                 placeholder="Buscar participante..."
                 className="
-                  w-full min-w-0 bg-transparent
-                  text-sm text-slate-900
+                  w-full min-w-0
+                  bg-transparent text-sm
+                  text-slate-900
                   outline-none
                   placeholder:text-slate-400
                   md:w-72
@@ -605,21 +714,39 @@ export default function AsistenciasPage() {
               <thead>
                 <tr
                   className="
-                    border-b border-slate-200
-                    bg-[#F5F9FF] text-left
+                    border-b
+                    border-slate-200
+                    bg-[#F5F9FF]
+                    text-left
                   "
                 >
+                  <th
+                    aria-label="Foto de perfil"
+                    className="
+                      w-[88px]
+                      px-4 py-4
+                    "
+                  />
+
                   <TableHeader>
                     Participante
                   </TableHeader>
 
-                  <TableHeader>CI</TableHeader>
+                  <TableHeader>
+                    CI
+                  </TableHeader>
 
-                  <TableHeader>Fecha</TableHeader>
+                  <TableHeader>
+                    Fecha
+                  </TableHeader>
 
-                  <TableHeader>Hora</TableHeader>
+                  <TableHeader>
+                    Hora
+                  </TableHeader>
 
-                  <TableHeader>Horario</TableHeader>
+                  <TableHeader>
+                    Horario
+                  </TableHeader>
 
                   <TableHeader>
                     Observaciones
@@ -631,9 +758,10 @@ export default function AsistenciasPage() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="
-                        px-6 py-12 text-center
+                        px-6 py-12
+                        text-center
                         text-slate-500
                       "
                     >
@@ -654,40 +782,65 @@ export default function AsistenciasPage() {
                         }
                         className="
                           cursor-pointer
-                          border-b border-slate-100
+                          border-b
+                          border-slate-100
                           transition-colors
                           hover:bg-[#FFF5F9]
                         "
                       >
                         <td
                           className="
-                            whitespace-nowrap px-6 py-5
-                            font-semibold text-slate-900
+                            w-[88px]
+                            px-4 py-3
                           "
                         >
-                          {
-                            asistencia.participantes
-                              ?.nombre
-                          }{" "}
-                          {
-                            asistencia.participantes
-                              ?.apellido
-                          }
+                          <FotoParticipante
+                            path={
+                              asistencia
+                                .participantes
+                                ?.foto_perfil_path ??
+                              null
+                            }
+                            nombre={
+                              asistencia.participantes
+                                ? `${asistencia.participantes.nombre} ${asistencia.participantes.apellido}`
+                                : "Participante"
+                            }
+                          />
                         </td>
 
                         <td
                           className="
-                            whitespace-nowrap px-6 py-5
+                            whitespace-nowrap
+                            px-6 py-5
+                            font-semibold
+                            text-slate-900
+                          "
+                        >
+                          {asistencia
+                            .participantes
+                            ?.nombre ?? "Sin datos"}{" "}
+                          {asistencia
+                            .participantes
+                            ?.apellido ?? ""}
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
                             text-slate-600
                           "
                         >
-                          {asistencia.participantes
-                            ?.ci || "Sin registrar"}
+                          {FormatHelper.mostrarCedula(
+                            asistencia.participantes?.ci,
+                          )}
                         </td>
 
                         <td
                           className="
-                            whitespace-nowrap px-6 py-5
+                            whitespace-nowrap
+                            px-6 py-5
                             text-slate-600
                           "
                         >
@@ -698,8 +851,10 @@ export default function AsistenciasPage() {
 
                         <td
                           className="
-                            whitespace-nowrap px-6 py-5
-                            font-semibold text-slate-900
+                            whitespace-nowrap
+                            px-6 py-5
+                            font-semibold
+                            text-slate-900
                           "
                         >
                           {formatearHora(
@@ -709,7 +864,8 @@ export default function AsistenciasPage() {
 
                         <td
                           className="
-                            whitespace-nowrap px-6 py-5
+                            whitespace-nowrap
+                            px-6 py-5
                             text-slate-600
                           "
                         >
@@ -735,16 +891,19 @@ export default function AsistenciasPage() {
                   )}
 
                 {!loading &&
-                  asistenciasVisibles.length === 0 && (
+                  asistenciasVisibles.length ===
+                    0 && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="
-                          px-6 py-12 text-center
+                          px-6 py-12
+                          text-center
                           text-slate-500
                         "
                       >
-                        No se encontraron asistencias.
+                        No se encontraron
+                        asistencias.
                       </td>
                     </tr>
                   )}
@@ -758,7 +917,9 @@ export default function AsistenciasPage() {
         open={showForm}
         form={form}
         seleccionada={seleccionada}
-        busquedaParticipante={busquedaParticipante}
+        busquedaParticipante={
+          busquedaParticipante
+        }
         participantesEncontradas={
           participantesEncontradas
         }
@@ -773,10 +934,73 @@ export default function AsistenciasPage() {
         onSelectParticipante={
           seleccionarParticipante
         }
-        onSelectHorario={seleccionarHorario}
+        onSelectHorario={
+          seleccionarHorario
+        }
         onFormChange={setForm}
         onClose={cerrarFormulario}
         onSubmit={guardar}
+      />
+    </div>
+  );
+}
+
+function FotoParticipante({
+  path,
+  nombre,
+}: {
+  path: string | null;
+  nombre: string;
+}) {
+  const [imageError, setImageError] =
+    useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [path]);
+
+  const fotoUrl = useMemo(() => {
+    if (!path) {
+      return null;
+    }
+
+    const { data } = supabase.storage
+      .from(FOTO_BUCKET)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  }, [path]);
+
+  const src =
+    fotoUrl && !imageError
+      ? fotoUrl
+      : PLACEHOLDER_FOTO;
+
+  return (
+    <div
+      className="
+        h-12 w-12 shrink-0
+        overflow-hidden rounded-full
+        border-2 border-white
+        bg-pink-50 shadow-sm
+        ring-1 ring-slate-200
+      "
+    >
+      <img
+        src={src}
+        alt={`Foto de ${nombre}`}
+        loading="lazy"
+        onError={() => {
+          if (
+            src !== PLACEHOLDER_FOTO
+          ) {
+            setImageError(true);
+          }
+        }}
+        className="
+          h-full w-full
+          object-cover
+        "
       />
     </div>
   );
@@ -815,8 +1039,9 @@ function Stat({
 
         <div
           className={`
-            flex h-12 w-12 shrink-0
-            items-center justify-center
+            flex h-12 w-12
+            shrink-0 items-center
+            justify-center
             rounded-2xl
             ${iconBackground}
           `}
@@ -836,8 +1061,9 @@ function TableHeader({
   return (
     <th
       className="
-        whitespace-nowrap px-6 py-4
-        text-sm font-semibold text-slate-700
+        whitespace-nowrap
+        px-6 py-4 text-sm
+        font-semibold text-slate-700
       "
     >
       {children}
@@ -869,18 +1095,25 @@ function RegistrarAsistenciaPanel({
   horarios: Horario[];
   saving: boolean;
   error: string;
-  onBusquedaChange: (value: string) => void;
+  onBusquedaChange: (
+    value: string,
+  ) => void;
   onSelectParticipante: (
     participante: Participante,
   ) => void;
-  onSelectHorario: (horarioId: string) => void;
-  onFormChange: (form: AsistenciaForm) => void;
+  onSelectHorario: (
+    horarioId: string,
+  ) => void;
+  onFormChange: (
+    form: AsistenciaForm,
+  ) => void;
   onClose: () => void;
   onSubmit: (
     event: FormEvent<HTMLFormElement>,
   ) => void;
 }) {
-  const formularioHabilitado = Boolean(seleccionada);
+  const formularioHabilitado =
+    Boolean(seleccionada);
 
   return (
     <>
@@ -888,8 +1121,10 @@ function RegistrarAsistenciaPanel({
         onClick={onClose}
         className={`
           fixed inset-0 z-40
-          bg-slate-950/20 backdrop-blur-[1px]
-          transition-opacity duration-300
+          bg-slate-950/20
+          backdrop-blur-[1px]
+          transition-opacity
+          duration-300
           ${
             open
               ? "pointer-events-auto opacity-100"
@@ -902,11 +1137,14 @@ function RegistrarAsistenciaPanel({
       <aside
         className={`
           fixed right-0 top-0 z-50
-          h-dvh w-full max-w-[760px]
+          h-dvh w-full
+          max-w-[760px]
           overflow-hidden
           border-l border-slate-200
-          bg-[#FFF5F9] shadow-2xl
-          transform-gpu will-change-transform
+          bg-[#FFF5F9]
+          shadow-2xl
+          transform-gpu
+          will-change-transform
           transition-transform
           duration-300 ease-out
           ${
@@ -920,18 +1158,22 @@ function RegistrarAsistenciaPanel({
         <div className="flex h-full flex-col">
           <header
             className="
-              flex shrink-0 items-center
+              flex shrink-0
+              items-center
               justify-between gap-4
-              border-b border-slate-200
+              border-b
+              border-slate-200
               bg-white px-6 py-5
             "
           >
             <div className="flex items-center gap-4">
               <div
                 className="
-                  flex h-12 w-12 shrink-0
-                  items-center justify-center
-                  rounded-2xl bg-pink-100
+                  flex h-12 w-12
+                  shrink-0 items-center
+                  justify-center
+                  rounded-2xl
+                  bg-pink-100
                   text-pink-700
                 "
               >
@@ -944,8 +1186,8 @@ function RegistrarAsistenciaPanel({
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Seleccioná una participante y completá
-                  los datos.
+                  Seleccioná una participante
+                  y completá los datos.
                 </p>
               </div>
             </div>
@@ -955,11 +1197,13 @@ function RegistrarAsistenciaPanel({
               onClick={onClose}
               disabled={saving}
               className="
-                rounded-full p-2 text-slate-500
+                rounded-full p-2
+                text-slate-500
                 transition-colors
                 hover:bg-slate-100
                 hover:text-slate-900
-                focus:outline-none focus:ring-4
+                focus:outline-none
+                focus:ring-4
                 focus:ring-pink-100
                 disabled:cursor-not-allowed
                 disabled:opacity-50
@@ -979,8 +1223,10 @@ function RegistrarAsistenciaPanel({
           >
             <div
               className="
-                flex-1 overflow-y-auto
-                overscroll-contain px-6 py-6
+                flex-1
+                overflow-y-auto
+                overscroll-contain
+                px-6 py-6
               "
             >
               <Section
@@ -993,36 +1239,46 @@ function RegistrarAsistenciaPanel({
                 <Input
                   required
                   label="Buscar participante"
-                  value={busquedaParticipante}
-                  onChange={onBusquedaChange}
+                  value={
+                    busquedaParticipante
+                  }
+                  onChange={
+                    onBusquedaChange
+                  }
                   placeholder="Ingresá al menos 2 caracteres"
                 />
 
                 {!seleccionada &&
-                  busquedaParticipante.trim().length >=
-                    2 &&
-                  participantesEncontradas.length ===
-                    0 && (
+                  busquedaParticipante
+                    .trim().length >= 2 &&
+                  participantesEncontradas
+                    .length === 0 && (
                     <div
                       className="
-                        rounded-2xl border
+                        rounded-2xl
+                        border
                         border-slate-200
-                        bg-[#F5F9FF] px-4 py-4
-                        text-sm text-slate-500
+                        bg-[#F5F9FF]
+                        px-4 py-4
+                        text-sm
+                        text-slate-500
                       "
                     >
-                      No se encontraron participantes.
+                      No se encontraron
+                      participantes.
                     </div>
                   )}
 
                 {!seleccionada &&
-                  participantesEncontradas.length >
-                    0 && (
+                  participantesEncontradas
+                    .length > 0 && (
                     <div className="flex flex-col gap-2">
                       {participantesEncontradas.map(
                         (participante) => (
                           <button
-                            key={participante.id}
+                            key={
+                              participante.id
+                            }
                             type="button"
                             onClick={() =>
                               onSelectParticipante(
@@ -1030,10 +1286,12 @@ function RegistrarAsistenciaPanel({
                               )
                             }
                             className="
-                              rounded-2xl border
+                              rounded-2xl
+                              border
                               border-slate-200
-                              bg-[#F5F9FF] p-4
-                              text-left shadow-sm
+                              bg-[#F5F9FF]
+                              p-4 text-left
+                              shadow-sm
                               transition-colors
                               hover:border-pink-300
                               hover:bg-white
@@ -1043,12 +1301,19 @@ function RegistrarAsistenciaPanel({
                             "
                           >
                             <p className="font-semibold text-slate-900">
-                              {participante.nombre}{" "}
-                              {participante.apellido}
+                              {
+                                participante.nombre
+                              }{" "}
+                              {
+                                participante.apellido
+                              }
                             </p>
 
                             <p className="mt-1 text-sm text-slate-500">
-                              CI: {participante.ci}
+                              CI:{" "}
+                              {FormatHelper.mostrarCedula(
+                                participante.ci,
+                              )}
                             </p>
 
                             {participante.telefono && (
@@ -1068,20 +1333,30 @@ function RegistrarAsistenciaPanel({
                 {seleccionada && (
                   <div
                     className="
-                      flex items-center justify-between
-                      gap-4 rounded-2xl
-                      border border-pink-200
-                      bg-pink-50 px-4 py-4
+                      flex items-center
+                      justify-between gap-4
+                      rounded-2xl
+                      border
+                      border-pink-200
+                      bg-pink-50
+                      px-4 py-4
                     "
                   >
                     <div>
                       <p className="font-semibold text-slate-900">
-                        {seleccionada.nombre}{" "}
-                        {seleccionada.apellido}
+                        {
+                          seleccionada.nombre
+                        }{" "}
+                        {
+                          seleccionada.apellido
+                        }
                       </p>
 
                       <p className="mt-1 text-sm text-slate-600">
-                        CI: {seleccionada.ci}
+                        CI:{" "}
+                        {FormatHelper.mostrarCedula(
+                          seleccionada.ci,
+                        )}
                       </p>
                     </div>
 
@@ -1094,9 +1369,15 @@ function RegistrarAsistenciaPanel({
                 className={
                   formularioHabilitado
                     ? ""
-                    : "pointer-events-none select-none opacity-40"
+                    : `
+                      pointer-events-none
+                      select-none
+                      opacity-40
+                    `
                 }
-                aria-disabled={!formularioHabilitado}
+                aria-disabled={
+                  !formularioHabilitado
+                }
               >
                 <Section
                   title="Datos de la asistencia"
@@ -1107,7 +1388,8 @@ function RegistrarAsistenciaPanel({
                 >
                   <div
                     className="
-                      grid grid-cols-1 gap-4
+                      grid grid-cols-1
+                      gap-4
                       sm:grid-cols-2
                     "
                   >
@@ -1140,38 +1422,47 @@ function RegistrarAsistenciaPanel({
 
                   <Select
                     label="Horario de clase"
-                    value={form.id_horario_clase}
-                    onChange={onSelectHorario}
+                    value={
+                      form.id_horario_clase
+                    }
+                    onChange={
+                      onSelectHorario
+                    }
                   >
                     <option value="">
                       Sin horario asociado
                     </option>
 
-                    {horarios.map((horario) => (
-                      <option
-                        key={horario.id}
-                        value={horario.id}
-                      >
-                        {diasSemana[
-                          horario.dia_semana
-                        ] ??
-                          `Día ${horario.dia_semana}`}{" "}
-                        ·{" "}
-                        {formatearRangoHorario(
-                          horario.hora_inicio,
-                          horario.hora_fin,
-                        )}
-                      </option>
-                    ))}
+                    {horarios.map(
+                      (horario) => (
+                        <option
+                          key={horario.id}
+                          value={horario.id}
+                        >
+                          {diasSemana[
+                            horario.dia_semana
+                          ] ??
+                            `Día ${horario.dia_semana}`}{" "}
+                          ·{" "}
+                          {formatearRangoHorario(
+                            horario.hora_inicio,
+                            horario.hora_fin,
+                          )}
+                        </option>
+                      ),
+                    )}
                   </Select>
 
                   <Textarea
                     label="Observaciones"
-                    value={form.observaciones}
+                    value={
+                      form.observaciones
+                    }
                     onChange={(value) =>
                       onFormChange({
                         ...form,
-                        observaciones: value,
+                        observaciones:
+                          value,
                       })
                     }
                     placeholder="Información adicional de la asistencia"
@@ -1182,9 +1473,14 @@ function RegistrarAsistenciaPanel({
               {error && (
                 <div
                   className="
-                    rounded-2xl border border-red-200
-                    bg-red-50 px-4 py-3
-                    text-sm font-medium text-red-700
+                    rounded-2xl
+                    border
+                    border-red-200
+                    bg-red-50
+                    px-4 py-3
+                    text-sm
+                    font-medium
+                    text-red-700
                   "
                 >
                   {error}
@@ -1194,9 +1490,11 @@ function RegistrarAsistenciaPanel({
 
             <footer
               className="
-                flex shrink-0 items-center
+                flex shrink-0
+                items-center
                 justify-end gap-3
-                border-t border-slate-200
+                border-t
+                border-slate-200
                 bg-white px-6 py-5
               "
             >
@@ -1205,9 +1503,12 @@ function RegistrarAsistenciaPanel({
                 onClick={onClose}
                 disabled={saving}
                 className="
-                  rounded-2xl border
-                  border-slate-300 bg-white
-                  px-5 py-3 font-semibold
+                  rounded-2xl
+                  border
+                  border-slate-300
+                  bg-white
+                  px-5 py-3
+                  font-semibold
                   text-slate-700
                   transition-colors
                   hover:bg-slate-50
@@ -1223,11 +1524,17 @@ function RegistrarAsistenciaPanel({
 
               <button
                 type="submit"
-                disabled={!seleccionada || saving}
+                disabled={
+                  !seleccionada ||
+                  saving
+                }
                 className="
-                  rounded-2xl bg-pink-600
-                  px-6 py-3 font-semibold
-                  text-white shadow-sm
+                  rounded-2xl
+                  bg-pink-600
+                  px-6 py-3
+                  font-semibold
+                  text-white
+                  shadow-sm
                   transition-colors
                   hover:bg-pink-700
                   focus:outline-none
@@ -1267,23 +1574,27 @@ function Section({
       className="
         mb-6 overflow-hidden
         rounded-3xl border
-        border-slate-200 bg-white
-        shadow-sm
+        border-slate-200
+        bg-white shadow-sm
       "
     >
       <div
         className="
           flex items-center gap-3
           border-b border-slate-200
-          bg-[#F5FFFB] px-5 py-4
+          bg-[#F5FFFB]
+          px-5 py-4
         "
       >
         <div
           className="
-            flex h-10 w-10 shrink-0
-            items-center justify-center
-            rounded-xl bg-white
-            text-pink-600 shadow-sm
+            flex h-10 w-10
+            shrink-0 items-center
+            justify-center
+            rounded-xl
+            bg-white
+            text-pink-600
+            shadow-sm
           "
         >
           {icon}
@@ -1320,7 +1631,10 @@ function FieldLabel({
 
       {required && (
         <span
-          className="ml-1 font-bold text-red-600"
+          className="
+            ml-1 font-bold
+            text-red-600
+          "
           aria-hidden="true"
         >
           *
@@ -1340,7 +1654,9 @@ function Input({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   type?: string;
   required?: boolean;
   placeholder?: string;
@@ -1358,12 +1674,16 @@ function Input({
         required={required}
         placeholder={placeholder}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
           rounded-2xl border
-          border-slate-300 bg-[#F5F9FF]
-          px-4 py-3 text-slate-900
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
           shadow-sm outline-none
           transition-colors
           placeholder:text-slate-400
@@ -1386,7 +1706,9 @@ function Textarea({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   placeholder?: string;
 }) {
   return (
@@ -1398,14 +1720,19 @@ function Textarea({
         rows={4}
         placeholder={placeholder}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
           resize-y rounded-2xl
-          border border-slate-300
-          bg-[#F5F9FF] px-4 py-3
-          text-slate-900 shadow-sm
-          outline-none transition-colors
+          border
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
+          shadow-sm outline-none
+          transition-colors
           placeholder:text-slate-400
           hover:border-slate-400
           focus:border-pink-400
@@ -1427,7 +1754,9 @@ function Select({
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   children: ReactNode;
   required?: boolean;
 }) {
@@ -1442,12 +1771,16 @@ function Select({
         value={value}
         required={required}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="
           rounded-2xl border
-          border-slate-300 bg-[#F5F9FF]
-          px-4 py-3 text-slate-900
+          border-slate-300
+          bg-[#F5F9FF]
+          px-4 py-3
+          text-slate-900
           shadow-sm outline-none
           transition-colors
           hover:border-slate-400

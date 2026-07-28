@@ -6,6 +6,9 @@ import {
   ClipboardPlus,
   Activity,
 } from "lucide-react";
+
+import FormatHelper from "../../helpers/FormatHelper";
+
 import type {
   FormEvent,
   ReactNode,
@@ -126,21 +129,21 @@ export default function NuevaParticipantePanel({
 
       <aside
         className={`
-            fixed right-0 top-0 z-50
-            h-dvh w-full max-w-[760px]
-            overflow-hidden
-            border-l border-slate-200
-            bg-[#FFF5F9] shadow-2xl
-            transform-gpu will-change-transform
-            transition-transform duration-300 ease-out
-            ${
+          fixed right-0 top-0 z-50
+          h-dvh w-full max-w-[760px]
+          overflow-hidden
+          border-l border-slate-200
+          bg-[#FFF5F9] shadow-2xl
+          transform-gpu will-change-transform
+          transition-transform duration-300 ease-out
+          ${
             open
-                ? "translate-x-0"
-                : "translate-x-full"
-            }
+              ? "translate-x-0"
+              : "translate-x-full"
+          }
         `}
         aria-hidden={!open}
-        >
+      >
         <div className="flex h-full flex-col">
           <header
             className="
@@ -206,8 +209,8 @@ export default function NuevaParticipantePanel({
                 className="
                   mb-6 rounded-2xl border
                   border-pink-200
-                  px-4 py-3 text-sm text-slate-600
                   bg-[#FFFBF5]
+                  px-4 py-3 text-sm text-slate-600
                 "
               >
                 Los campos marcados con{" "}
@@ -284,7 +287,7 @@ export default function NuevaParticipantePanel({
                     }
                   />
 
-                  <Input
+                  <CedulaInput
                     required
                     label="Cédula"
                     value={form.ci}
@@ -715,6 +718,90 @@ function Input({
           focus:ring-pink-100
         "
       />
+    </label>
+  );
+}
+
+function CedulaInput({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  const numeros = FormatHelper.limpiarCedula(value);
+  const valorFormateado =
+    FormatHelper.formatearCedula(value);
+
+  return (
+    <label className="flex flex-col gap-2">
+      <FieldLabel
+        label={label}
+        required={required}
+      />
+
+      <input
+        type="text"
+        value={valorFormateado}
+        required={required}
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="1.234.567-8"
+        pattern="[0-9]\.[0-9]{3}\.[0-9]{3}-[0-9]"
+        title="Ingresá una cédula completa con el formato 1.234.567-8"
+        aria-invalid={
+          numeros.length > 0 &&
+          !FormatHelper.cedulaCompleta(numeros)
+        }
+        onChange={(event) => {
+          const cedulaLimpia =
+            FormatHelper.limpiarCedula(event.target.value);
+
+          onChange(cedulaLimpia);
+        }}
+        onInvalid={(event) => {
+          const input = event.currentTarget;
+
+          if (!numeros.length) {
+            input.setCustomValidity(
+              "La cédula es obligatoria.",
+            );
+            return;
+          }
+
+          input.setCustomValidity(
+            "Ingresá los 8 números de la cédula.",
+          );
+        }}
+        onInput={(event) => {
+          event.currentTarget.setCustomValidity("");
+        }}
+        className="
+          rounded-2xl border border-slate-300
+          bg-[#F5F9FF] px-4 py-3
+          text-slate-900 shadow-sm
+          outline-none transition
+          placeholder:text-slate-400
+          hover:border-slate-400
+          focus:border-pink-400
+          focus:bg-white
+          focus:ring-4
+          focus:ring-pink-100
+          invalid:border-red-400
+          invalid:focus:border-red-400
+          invalid:focus:ring-red-100
+        "
+      />
+
+      {numeros.length > 0 && numeros.length < 8 && (
+        <span className="text-xs font-medium text-red-600">
+          La cédula debe contener 8 números.
+        </span>
+      )}
     </label>
   );
 }

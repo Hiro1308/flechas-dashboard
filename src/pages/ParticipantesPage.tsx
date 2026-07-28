@@ -19,8 +19,11 @@ import NuevaParticipantePanel, {
 } from "../components/participantes/NuevaParticipantePanel";
 import { supabase } from "../services/supabase";
 
+import FormatHelper from "../helpers/FormatHelper";
+
 type Participante = {
   id: string;
+  foto_perfil_path: string | null;
   tipo_participante: "fundacion" | "escuela";
   nombre: string;
   apellido: string;
@@ -40,7 +43,11 @@ type Participante = {
   alergias: string | null;
   otros_antecedentes: string | null;
   desarrolla_linfedema: boolean | null;
-  miembro_afectado: "derecho" | "izquierdo" | "ambos" | null;
+  miembro_afectado:
+    | "derecho"
+    | "izquierdo"
+    | "ambos"
+    | null;
   observaciones: string | null;
   estado: "activa" | "baja";
   fecha_ingreso: string;
@@ -58,12 +65,21 @@ type SortKey =
 
 type SortDirection = "asc" | "desc";
 
-const formatDate = (value?: string | null) => {
+const FOTO_BUCKET = "fotos-participantes";
+
+const PLACEHOLDER_FOTO =
+  "/placeholder_person.png";
+
+const formatDate = (
+  value?: string | null,
+) => {
   if (!value) {
     return "Sin registrar";
   }
 
-  return new Intl.DateTimeFormat("es-UY").format(
+  return new Intl.DateTimeFormat(
+    "es-UY",
+  ).format(
     new Date(`${value}T00:00:00`),
   );
 };
@@ -71,23 +87,41 @@ const formatDate = (value?: string | null) => {
 export default function ParticipantesPage() {
   const navigate = useNavigate();
 
-  const [showForm, setShowForm] = useState(false);
-  const [participantes, setParticipantes] = useState<Participante[]>([]);
-  const [busqueda, setBusqueda] = useState("");
+  const [showForm, setShowForm] =
+    useState(false);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [
+    participantes,
+    setParticipantes,
+  ] = useState<Participante[]>([]);
 
-  const [pageError, setPageError] = useState("");
-  const [formError, setFormError] = useState("");
+  const [busqueda, setBusqueda] =
+    useState("");
 
-  const [form, setForm] = useState<NuevaParticipanteForm>(
-    crearFormularioInicial,
-  );
+  const [loading, setLoading] =
+    useState(true);
 
-  const [sortKey, setSortKey] = useState<SortKey>("nombre");
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>("asc");
+  const [saving, setSaving] =
+    useState(false);
+
+  const [pageError, setPageError] =
+    useState("");
+
+  const [formError, setFormError] =
+    useState("");
+
+  const [form, setForm] =
+    useState<NuevaParticipanteForm>(
+      crearFormularioInicial,
+    );
+
+  const [sortKey, setSortKey] =
+    useState<SortKey>("nombre");
+
+  const [
+    sortDirection,
+    setSortDirection,
+  ] = useState<SortDirection>("asc");
 
   const cargarParticipantes = async () => {
     setLoading(true);
@@ -98,6 +132,7 @@ export default function ParticipantesPage() {
       .select(
         `
           id,
+          foto_perfil_path,
           tipo_participante,
           nombre,
           apellido,
@@ -135,7 +170,9 @@ export default function ParticipantesPage() {
       setPageError(error.message);
       setParticipantes([]);
     } else {
-      setParticipantes((data ?? []) as Participante[]);
+      setParticipantes(
+        (data ?? []) as Participante[],
+      );
     }
 
     setLoading(false);
@@ -145,77 +182,111 @@ export default function ParticipantesPage() {
     void cargarParticipantes();
   }, []);
 
-  const participantesFiltradas = useMemo(() => {
-    const textoBusqueda = busqueda.trim().toLowerCase();
-
-    const resultado = participantes.filter((participante) => {
-      if (!textoBusqueda) {
-        return true;
-      }
-
-      const textoParticipante = [
-        participante.nombre,
-        participante.apellido,
-        participante.ci,
-        participante.telefono ?? "",
-      ]
-        .join(" ")
+  const participantesFiltradas =
+    useMemo(() => {
+      const textoBusqueda = busqueda
+        .trim()
         .toLowerCase();
 
-      return textoParticipante.includes(textoBusqueda);
-    });
+      const resultado =
+        participantes.filter(
+          (participante) => {
+            if (!textoBusqueda) {
+              return true;
+            }
 
-    return [...resultado].sort((a, b) => {
-      let valorA = "";
-      let valorB = "";
+            const coincideTexto = [
+              participante.nombre,
+              participante.apellido,
+              participante.telefono ?? "",
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(textoBusqueda);
 
-      switch (sortKey) {
-        case "nombre":
-          valorA = `${a.nombre} ${a.apellido}`;
-          valorB = `${b.nombre} ${b.apellido}`;
-          break;
+            const coincideCedula =
+              FormatHelper.cedulaIncluyeBusqueda(
+                participante.ci,
+                busqueda,
+              );
 
-        case "ci":
-          valorA = a.ci;
-          valorB = b.ci;
-          break;
+            return (
+              coincideTexto ||
+              coincideCedula
+            );
+          },
+        );
 
-        case "telefono":
-          valorA = a.telefono ?? "";
-          valorB = b.telefono ?? "";
-          break;
+      return [...resultado].sort(
+        (a, b) => {
+          let valorA = "";
+          let valorB = "";
 
-        case "estado":
-          valorA = a.estado;
-          valorB = b.estado;
-          break;
+          switch (sortKey) {
+            case "nombre":
+              valorA =
+                `${a.nombre} ${a.apellido}`;
+              valorB =
+                `${b.nombre} ${b.apellido}`;
+              break;
 
-        case "ultimo_pago":
-          valorA = a.ultimo_pago?.[0]?.fecha_pago ?? "";
-          valorB = b.ultimo_pago?.[0]?.fecha_pago ?? "";
-          break;
-      }
+            case "ci":
+              valorA = a.ci;
+              valorB = b.ci;
+              break;
 
-      const comparacion = valorA.localeCompare(valorB, "es", {
-        numeric: true,
-        sensitivity: "base",
-      });
+            case "telefono":
+              valorA = a.telefono ?? "";
+              valorB = b.telefono ?? "";
+              break;
 
-      return sortDirection === "asc"
-        ? comparacion
-        : -comparacion;
-    });
-  }, [
-    busqueda,
-    participantes,
-    sortDirection,
-    sortKey,
-  ]);
+            case "estado":
+              valorA = a.estado;
+              valorB = b.estado;
+              break;
 
-  const cambiarOrden = (key: SortKey) => {
+            case "ultimo_pago":
+              valorA =
+                a.ultimo_pago?.[0]
+                  ?.fecha_pago ?? "";
+
+              valorB =
+                b.ultimo_pago?.[0]
+                  ?.fecha_pago ?? "";
+              break;
+          }
+
+          const comparacion =
+            valorA.localeCompare(
+              valorB,
+              "es",
+              {
+                numeric: true,
+                sensitivity: "base",
+              },
+            );
+
+          return sortDirection === "asc"
+            ? comparacion
+            : -comparacion;
+        },
+      );
+    }, [
+      busqueda,
+      participantes,
+      sortDirection,
+      sortKey,
+    ]);
+
+  const cambiarOrden = (
+    key: SortKey,
+  ) => {
     if (sortKey === key) {
-      setSortDirection((currentDirection) =>
-        currentDirection === "asc" ? "desc" : "asc",
+      setSortDirection(
+        (currentDirection) =>
+          currentDirection === "asc"
+            ? "desc"
+            : "asc",
       );
 
       return;
@@ -249,35 +320,74 @@ export default function ParticipantesPage() {
     setFormError("");
 
     const payload = {
-      tipo_participante: form.tipo_participante,
-      fecha_ingreso: form.fecha_ingreso,
+      tipo_participante:
+        form.tipo_participante,
+
+      fecha_ingreso:
+        form.fecha_ingreso,
+
       nombre: form.nombre.trim(),
-      apellido: form.apellido.trim(),
+
+      apellido:
+        form.apellido.trim(),
+
       ci: form.ci.trim(),
-      fecha_nacimiento: form.fecha_nacimiento || null,
-      telefono: form.telefono.trim() || null,
+
+      fecha_nacimiento:
+        form.fecha_nacimiento || null,
+
+      telefono:
+        form.telefono.trim() || null,
+
       telefono_alternativo:
-        form.telefono_alternativo.trim() || null,
-      direccion: form.direccion.trim() || null,
-      email: form.email.trim() || null,
-      ocupacion: form.ocupacion.trim() || null,
+        form.telefono_alternativo.trim() ||
+        null,
+
+      direccion:
+        form.direccion.trim() || null,
+
+      email:
+        form.email.trim() || null,
+
+      ocupacion:
+        form.ocupacion.trim() || null,
+
       prestador_salud:
-        form.prestador_salud.trim() || null,
+        form.prestador_salud.trim() ||
+        null,
+
       emergencia_movil:
-        form.emergencia_movil.trim() || null,
-      fecha_cirugia: form.fecha_cirugia || null,
-      tipo_cirugia: form.tipo_cirugia.trim() || null,
+        form.emergencia_movil.trim() ||
+        null,
+
+      fecha_cirugia:
+        form.fecha_cirugia || null,
+
+      tipo_cirugia:
+        form.tipo_cirugia.trim() || null,
+
       hta: form.hta,
+
       diabetes: form.diabetes,
-      alergias: form.alergias.trim() || null,
+
+      alergias:
+        form.alergias.trim() || null,
+
       otros_antecedentes:
-        form.otros_antecedentes.trim() || null,
+        form.otros_antecedentes.trim() ||
+        null,
+
       desarrolla_linfedema:
         form.desarrolla_linfedema === ""
           ? null
-          : form.desarrolla_linfedema === "true",
-      miembro_afectado: form.miembro_afectado || null,
-      observaciones: form.observaciones.trim() || null,
+          : form.desarrolla_linfedema ===
+            "true",
+
+      miembro_afectado:
+        form.miembro_afectado || null,
+
+      observaciones:
+        form.observaciones.trim() || null,
     };
 
     const { error } = await supabase
@@ -307,7 +417,8 @@ export default function ParticipantesPage() {
     <div className="relative flex flex-col gap-6">
       <div
         className={`
-          flex flex-col gap-6 transition-all duration-300
+          flex flex-col gap-6
+          transition-all duration-300
           ${
             showForm
               ? "pointer-events-none opacity-40"
@@ -315,9 +426,19 @@ export default function ParticipantesPage() {
           }
         `}
       >
-        <div className="flex items-center justify-between gap-4">
+        <div
+          className="
+            flex items-center
+            justify-between gap-4
+          "
+        >
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">
+            <h1
+              className="
+                text-3xl font-bold
+                text-slate-900
+              "
+            >
               Participantes
             </h1>
 
@@ -330,10 +451,13 @@ export default function ParticipantesPage() {
             type="button"
             onClick={abrirFormulario}
             className="
-              rounded-2xl bg-pink-600 px-5 py-3
-              font-semibold text-white shadow-sm
+              rounded-2xl bg-pink-600
+              px-5 py-3 font-semibold
+              text-white shadow-sm
               transition hover:bg-pink-700
-              focus:outline-none focus:ring-4 focus:ring-pink-200
+              focus:outline-none
+              focus:ring-4
+              focus:ring-pink-200
             "
           >
             Nueva participante
@@ -343,39 +467,60 @@ export default function ParticipantesPage() {
         <Card className="overflow-hidden p-0">
           <div
             className="
-              flex flex-col gap-4 border-b border-slate-200
-              px-6 py-5 md:flex-row md:items-center
+              flex flex-col gap-4
+              border-b border-slate-200
+              px-6 py-5
+              md:flex-row md:items-center
               md:justify-between
             "
           >
-            <p className="font-semibold text-slate-700">
-              {participantes.length} participantes registradas
+            <p
+              className="
+                font-semibold
+                text-slate-700
+              "
+            >
+              {participantes.length}{" "}
+              participantes registradas
             </p>
 
             <div
               className="
-                flex items-center gap-3 rounded-2xl
-                border border-slate-300 bg-[#F5F9FF]
-                px-4 py-3 shadow-sm transition
+                flex items-center gap-3
+                rounded-2xl border
+                border-slate-300
+                bg-[#F5F9FF]
+                px-4 py-3 shadow-sm
+                transition
                 focus-within:border-pink-400
                 focus-within:bg-white
                 focus-within:ring-4
                 focus-within:ring-pink-100
               "
             >
-              <Search className="h-4 w-4 shrink-0 text-slate-500" />
+              <Search
+                className="
+                  h-4 w-4 shrink-0
+                  text-slate-500
+                "
+              />
 
               <input
                 type="search"
                 value={busqueda}
                 onChange={(event) =>
-                  setBusqueda(event.target.value)
+                  setBusqueda(
+                    event.target.value,
+                  )
                 }
                 placeholder="Buscar por nombre, CI o teléfono..."
                 className="
-                  w-full min-w-0 bg-transparent text-sm
-                  text-slate-900 outline-none
-                  placeholder:text-slate-400 md:w-72
+                  w-full min-w-0
+                  bg-transparent text-sm
+                  text-slate-900
+                  outline-none
+                  placeholder:text-slate-400
+                  md:w-72
                 "
               />
             </div>
@@ -384,8 +529,10 @@ export default function ParticipantesPage() {
           {pageError && (
             <div
               className="
-                m-6 rounded-2xl border border-red-200
-                bg-red-50 px-4 py-3 text-sm text-red-700
+                m-6 rounded-2xl
+                border border-red-200
+                bg-red-50 px-4 py-3
+                text-sm text-red-700
               "
             >
               {pageError}
@@ -393,14 +540,28 @@ export default function ParticipantesPage() {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table
+              className="
+                w-full border-collapse
+              "
+            >
               <thead>
                 <tr
                   className="
-                    border-b border-slate-200
-                    bg-[#F5F9FF] text-left
+                    border-b
+                    border-slate-200
+                    bg-[#F5F9FF]
+                    text-left
                   "
                 >
+                  <th
+                    aria-label="Foto de perfil"
+                    className="
+                      w-[88px]
+                      px-4 py-4
+                    "
+                  />
+
                   <SortableHeader
                     label="Nombre"
                     sortKey="nombre"
@@ -445,86 +606,129 @@ export default function ParticipantesPage() {
 
               <tbody>
                 {!loading &&
-                  participantesFiltradas.map((participante) => (
-                    <tr
-                      key={participante.id}
-                      onClick={() =>
-                        navigate(
-                          `/participantes/${participante.id}`,
-                        )
-                      }
-                      className="
-                        cursor-pointer border-b border-slate-100
-                        transition hover:bg-[#FFF5F9]
-                      "
-                    >
-                      <td
+                  participantesFiltradas.map(
+                    (participante) => (
+                      <tr
+                        key={participante.id}
+                        onClick={() =>
+                          navigate(
+                            `/participantes/${participante.id}`,
+                          )
+                        }
                         className="
-                          whitespace-nowrap px-6 py-5
-                          font-medium text-slate-900
+                          cursor-pointer
+                          border-b
+                          border-slate-100
+                          transition
+                          hover:bg-[#FFF5F9]
                         "
                       >
-                        {participante.nombre}{" "}
-                        {participante.apellido}
-                      </td>
-
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-600
-                        "
-                      >
-                        {participante.ci}
-                      </td>
-
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-600
-                        "
-                      >
-                        {participante.telefono ||
-                          "Sin registrar"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-6 py-5">
-                        <span
-                          className={`
-                            rounded-full px-3 py-1
-                            text-xs font-semibold
-                            ${
-                              participante.estado === "activa"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-slate-100 text-slate-600"
-                            }
-                          `}
+                        <td
+                          className="
+                            w-[88px]
+                            px-4 py-3
+                          "
                         >
-                          {participante.estado === "activa"
-                            ? "Activa"
-                            : "Baja"}
-                        </span>
-                      </td>
+                          <FotoParticipante
+                            path={
+                              participante.foto_perfil_path
+                            }
+                            nombre={`${participante.nombre} ${participante.apellido}`}
+                          />
+                        </td>
 
-                      <td
-                        className="
-                          whitespace-nowrap px-6 py-5
-                          text-slate-600
-                        "
-                      >
-                        {formatDate(
-                          participante.ultimo_pago?.[0]
-                            ?.fecha_pago,
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            font-medium
+                            text-slate-900
+                          "
+                        >
+                          {participante.nombre}{" "}
+                          {participante.apellido}
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-600
+                          "
+                        >
+                          {FormatHelper.mostrarCedula(
+                            participante.ci,
+                          )}
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-600
+                          "
+                        >
+                          {participante.telefono ||
+                            "Sin registrar"}
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                          "
+                        >
+                          <span
+                            className={`
+                              rounded-full
+                              px-3 py-1
+                              text-xs
+                              font-semibold
+                              ${
+                                participante.estado ===
+                                "activa"
+                                  ? `
+                                    bg-green-100
+                                    text-green-700
+                                  `
+                                  : `
+                                    bg-slate-100
+                                    text-slate-600
+                                  `
+                              }
+                            `}
+                          >
+                            {participante.estado ===
+                            "activa"
+                              ? "Activa"
+                              : "Baja"}
+                          </span>
+                        </td>
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-6 py-5
+                            text-slate-600
+                          "
+                        >
+                          {formatDate(
+                            participante
+                              .ultimo_pago?.[0]
+                              ?.fecha_pago,
+                          )}
+                        </td>
+                      </tr>
+                    ),
+                  )}
 
                 {loading && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="
-                        px-6 py-12 text-center
+                        px-6 py-12
+                        text-center
                         text-slate-500
                       "
                     >
@@ -534,16 +738,19 @@ export default function ParticipantesPage() {
                 )}
 
                 {!loading &&
-                  participantesFiltradas.length === 0 && (
+                  participantesFiltradas
+                    .length === 0 && (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="
-                          px-6 py-12 text-center
+                          px-6 py-12
+                          text-center
                           text-slate-500
                         "
                       >
-                        No se encontraron participantes.
+                        No se encontraron
+                        participantes.
                       </td>
                     </tr>
                   )}
@@ -566,6 +773,67 @@ export default function ParticipantesPage() {
   );
 }
 
+function FotoParticipante({
+  path,
+  nombre,
+}: {
+  path: string | null;
+  nombre: string;
+}) {
+  const [imageError, setImageError] =
+    useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [path]);
+
+  const fotoUrl = useMemo(() => {
+    if (!path) {
+      return null;
+    }
+
+    const { data } = supabase.storage
+      .from(FOTO_BUCKET)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  }, [path]);
+
+  const src =
+    fotoUrl && !imageError
+      ? fotoUrl
+      : PLACEHOLDER_FOTO;
+
+  return (
+    <div
+      className="
+        h-12 w-12 shrink-0
+        overflow-hidden
+        rounded-full
+        border-2 border-white
+        bg-pink-50
+        shadow-sm
+        ring-1 ring-slate-200
+      "
+    >
+      <img
+        src={src}
+        alt={`Foto de ${nombre}`}
+        loading="lazy"
+        onError={() => {
+          if (src !== PLACEHOLDER_FOTO) {
+            setImageError(true);
+          }
+        }}
+        className="
+          h-full w-full
+          object-cover
+        "
+      />
+    </div>
+  );
+}
+
 function SortableHeader({
   label,
   sortKey,
@@ -579,7 +847,8 @@ function SortableHeader({
   direction: SortDirection;
   onSort: (key: SortKey) => void;
 }) {
-  const isActive = activeSortKey === sortKey;
+  const isActive =
+    activeSortKey === sortKey;
 
   return (
     <th className="px-6 py-4">
@@ -587,10 +856,14 @@ function SortableHeader({
         type="button"
         onClick={() => onSort(sortKey)}
         className="
-          group flex w-full items-center gap-2
-          whitespace-nowrap text-left text-sm
-          font-semibold text-slate-700
-          transition hover:text-pink-700
+          group flex w-full
+          items-center gap-2
+          whitespace-nowrap
+          text-left text-sm
+          font-semibold
+          text-slate-700
+          transition
+          hover:text-pink-700
         "
         aria-label={`Ordenar por ${label}`}
       >
@@ -598,15 +871,27 @@ function SortableHeader({
 
         {isActive ? (
           direction === "asc" ? (
-            <ArrowUp className="h-4 w-4 text-pink-600" />
+            <ArrowUp
+              className="
+                h-4 w-4
+                text-pink-600
+              "
+            />
           ) : (
-            <ArrowDown className="h-4 w-4 text-pink-600" />
+            <ArrowDown
+              className="
+                h-4 w-4
+                text-pink-600
+              "
+            />
           )
         ) : (
           <ArrowUpDown
             className="
-              h-4 w-4 text-slate-400
-              transition group-hover:text-pink-500
+              h-4 w-4
+              text-slate-400
+              transition
+              group-hover:text-pink-500
             "
           />
         )}

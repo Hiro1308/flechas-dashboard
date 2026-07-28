@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mantine/core": "^9.5.0",
+    "@mantine/dates": "^9.5.0",
+    "@mantine/hooks": "^9.5.0",
     "@supabase/supabase-js": "^2.106.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.3.0",
