@@ -1,5 +1,17 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, RotateCcw, Save, Clock } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Clock,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+} from "lucide-react";
+
 import Card from "../components/ui/Card";
 import { supabase } from "../services/supabase";
 
@@ -12,60 +24,186 @@ type HorarioRow = {
   observaciones: string;
   isNew?: boolean;
 };
+
+type HorarioDb = {
+  id: string;
+  dia_semana: number;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  activo: boolean;
+  observaciones: string | null;
+};
+
 const diasSemana = [
-  { value: "1", label: "Lunes" },
-  { value: "2", label: "Martes" },
-  { value: "3", label: "Miércoles" },
-  { value: "4", label: "Jueves" },
-  { value: "5", label: "Viernes" },
-  { value: "6", label: "Sábado" },
-  { value: "7", label: "Domingo" },
+  {
+    value: "1",
+    label: "Lunes",
+  },
+  {
+    value: "2",
+    label: "Martes",
+  },
+  {
+    value: "3",
+    label: "Miércoles",
+  },
+  {
+    value: "4",
+    label: "Jueves",
+  },
+  {
+    value: "5",
+    label: "Viernes",
+  },
+  {
+    value: "6",
+    label: "Sábado",
+  },
+  {
+    value: "7",
+    label: "Domingo",
+  },
 ];
-const mapHorario = (h: any): HorarioRow => ({
-  id: h.id,
-  diaSemana: String(h.dia_semana),
-  horaInicio: h.hora_inicio?.slice(0, 5) ?? "",
-  horaFin: h.hora_fin?.slice(0, 5) ?? "",
-  activo: h.activo,
-  observaciones: h.observaciones ?? "",
-});
+
+const opcionesHora = Array.from(
+  {
+    length: 24,
+  },
+  (_, hora) =>
+    ["00", "15", "30", "45"].map(
+      (minutos) =>
+        `${String(hora).padStart(2, "0")}:${minutos}`,
+    ),
+).flat();
+
+function normalizarHora(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return value.slice(0, 5);
+}
+
+function mapHorario(horario: HorarioDb): HorarioRow {
+  return {
+    id: horario.id,
+    diaSemana: String(horario.dia_semana),
+    horaInicio: normalizarHora(
+      horario.hora_inicio,
+    ),
+    horaFin: normalizarHora(horario.hora_fin),
+    activo: horario.activo,
+    observaciones: horario.observaciones ?? "",
+  };
+}
+
+function ordenarHorarios(horarios: HorarioRow[]) {
+  return [...horarios].sort((a, b) => {
+    const diferenciaDia =
+      Number(a.diaSemana) - Number(b.diaSemana);
+
+    if (diferenciaDia !== 0) {
+      return diferenciaDia;
+    }
+
+    return a.horaInicio.localeCompare(
+      b.horaInicio,
+      "es",
+      {
+        numeric: true,
+      },
+    );
+  });
+}
 
 export default function HorariosPage() {
-  const [horarios, setHorarios] = useState<HorarioRow[]>([]);
-  const [original, setOriginal] = useState<HorarioRow[]>([]);
+  const [horarios, setHorarios] = useState<
+    HorarioRow[]
+  >([]);
+
+  const [original, setOriginal] = useState<
+    HorarioRow[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
   const cargar = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("horarios_clase")
-      .select("*")
-      .order("dia_semana")
-      .order("hora_inicio");
-    if (error) setError(error.message);
-    else {
-      const rows = (data ?? []).map(mapHorario);
+    setError("");
+
+    const { data, error: cargarError } =
+      await supabase
+        .from("horarios_clase")
+        .select(
+          `
+            id,
+            dia_semana,
+            hora_inicio,
+            hora_fin,
+            activo,
+            observaciones
+          `,
+        )
+        .order("dia_semana", {
+          ascending: true,
+        })
+        .order("hora_inicio", {
+          ascending: true,
+        });
+
+    if (cargarError) {
+      setError(cargarError.message);
+      setHorarios([]);
+      setOriginal([]);
+    } else {
+      const rows = (data ?? []).map((item) =>
+        mapHorario(item as HorarioDb),
+      );
+
       setHorarios(rows);
       setOriginal(rows);
     }
+
     setLoading(false);
   };
+
   useEffect(() => {
     void cargar();
   }, []);
-  const hasChanges = JSON.stringify(horarios) !== JSON.stringify(original);
-  const update = (
+
+  const hasChanges = useMemo(
+    () =>
+      JSON.stringify(horarios) !==
+      JSON.stringify(original),
+    [horarios, original],
+  );
+
+  const update = <
+    Key extends keyof HorarioRow,
+  >(
     id: string,
-    field: keyof HorarioRow,
-    value: string | boolean,
-  ) =>
-    setHorarios((p) =>
-      p.map((h) => (h.id === id ? { ...h, [field]: value } : h)),
+    field: Key,
+    value: HorarioRow[Key],
+  ) => {
+    setHorarios((horariosActuales) =>
+      horariosActuales.map((horario) =>
+        horario.id === id
+          ? {
+              ...horario,
+              [field]: value,
+            }
+          : horario,
+      ),
     );
-  const agregar = () =>
-    setHorarios((p) => [
-      ...p,
+  };
+
+  const agregar = () => {
+    setError("");
+
+    setHorarios((horariosActuales) => [
+      ...horariosActuales,
       {
         id: crypto.randomUUID(),
         diaSemana: "1",
@@ -76,217 +214,539 @@ export default function HorariosPage() {
         isNew: true,
       },
     ]);
-  const quitar = async (h: HorarioRow) => {
-    if (h.isNew) {
-      setHorarios((p) => p.filter((x) => x.id !== h.id));
+  };
+
+  const quitar = async (horario: HorarioRow) => {
+    setError("");
+
+    if (horario.isNew) {
+      setHorarios((horariosActuales) =>
+        horariosActuales.filter(
+          (item) => item.id !== horario.id,
+        ),
+      );
+
       return;
     }
-    const { count } = await supabase
-      .from("asistencias")
-      .select("id", { count: "exact", head: true })
-      .eq("id_horario_clase", h.id);
+
+    const { count, error: countError } =
+      await supabase
+        .from("asistencias")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("id_horario_clase", horario.id);
+
+    if (countError) {
+      setError(countError.message);
+      return;
+    }
+
     if ((count ?? 0) > 0) {
       setError(
         "Ese horario tiene asistencias asociadas. Desactivalo en lugar de eliminarlo.",
       );
+
       return;
     }
-    setHorarios((p) => p.filter((x) => x.id !== h.id));
+
+    setHorarios((horariosActuales) =>
+      horariosActuales.filter(
+        (item) => item.id !== horario.id,
+      ),
+    );
   };
+
+  const validarHorarios = () => {
+    for (const horario of horarios) {
+      if (!horario.horaInicio) {
+        return "Todos los horarios deben tener una hora de inicio.";
+      }
+
+      if (
+        horario.horaFin &&
+        horario.horaFin <= horario.horaInicio
+      ) {
+        return "La hora de finalización debe ser posterior a la hora de inicio.";
+      }
+    }
+
+    return "";
+  };
+
   const guardar = async () => {
+    const validationError = validarHorarios();
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setSaving(true);
     setError("");
+
     const eliminados = original
-      .filter((o) => !horarios.some((h) => h.id === o.id))
-      .map((h) => h.id);
-    if (eliminados.length) {
-      const { error } = await supabase
-        .from("horarios_clase")
-        .delete()
-        .in("id", eliminados);
-      if (error) {
-        setError(error.message);
+      .filter(
+        (horarioOriginal) =>
+          !horarios.some(
+            (horarioActual) =>
+              horarioActual.id === horarioOriginal.id,
+          ),
+      )
+      .map((horario) => horario.id);
+
+    if (eliminados.length > 0) {
+      const { error: deleteError } =
+        await supabase
+          .from("horarios_clase")
+          .delete()
+          .in("id", eliminados);
+
+      if (deleteError) {
+        setError(deleteError.message);
         setSaving(false);
         return;
       }
     }
+
     const nuevos = horarios
-      .filter((h) => h.isNew)
-      .map((h) => ({
-        dia_semana: Number(h.diaSemana),
-        hora_inicio: h.horaInicio,
-        hora_fin: h.horaFin || null,
-        activo: h.activo,
-        observaciones: h.observaciones || null,
+      .filter((horario) => horario.isNew)
+      .map((horario) => ({
+        dia_semana: Number(
+          horario.diaSemana,
+        ),
+        hora_inicio: horario.horaInicio,
+        hora_fin: horario.horaFin || null,
+        activo: horario.activo,
+        observaciones:
+          horario.observaciones.trim() || null,
       }));
-    if (nuevos.length) {
-      const { error } = await supabase.from("horarios_clase").insert(nuevos);
-      if (error) {
-        setError(error.message);
+
+    if (nuevos.length > 0) {
+      const { error: insertError } =
+        await supabase
+          .from("horarios_clase")
+          .insert(nuevos);
+
+      if (insertError) {
+        setError(insertError.message);
         setSaving(false);
         return;
       }
     }
-    for (const h of horarios.filter((h) => !h.isNew)) {
-      const { error } = await supabase
-        .from("horarios_clase")
-        .update({
-          dia_semana: Number(h.diaSemana),
-          hora_inicio: h.horaInicio,
-          hora_fin: h.horaFin || null,
-          activo: h.activo,
-          observaciones: h.observaciones || null,
-        })
-        .eq("id", h.id);
-      if (error) {
-        setError(error.message);
+
+    const existentes = horarios.filter(
+      (horario) => !horario.isNew,
+    );
+
+    for (const horario of existentes) {
+      const originalHorario = original.find(
+        (item) => item.id === horario.id,
+      );
+
+      if (
+        originalHorario &&
+        JSON.stringify(originalHorario) ===
+          JSON.stringify(horario)
+      ) {
+        continue;
+      }
+
+      const { error: updateError } =
+        await supabase
+          .from("horarios_clase")
+          .update({
+            dia_semana: Number(
+              horario.diaSemana,
+            ),
+            hora_inicio: horario.horaInicio,
+            hora_fin:
+              horario.horaFin || null,
+            activo: horario.activo,
+            observaciones:
+              horario.observaciones.trim() ||
+              null,
+          })
+          .eq("id", horario.id);
+
+      if (updateError) {
+        setError(updateError.message);
         setSaving(false);
         return;
       }
     }
+
     await cargar();
     setSaving(false);
   };
+
+  const deshacer = () => {
+    setHorarios(original);
+    setError("");
+  };
+
+  const horariosOrdenados = useMemo(
+    () => ordenarHorarios(horarios),
+    [horarios],
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div
+        className="
+          flex flex-col gap-4
+          sm:flex-row sm:items-center
+          sm:justify-between
+        "
+      >
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Horarios</h1>
+          <h1 className="text-3xl font-bold text-slate-900">
+            Horarios
+          </h1>
+
           <p className="mt-2 text-slate-500">
-            Editá directamente los días y horarios de clase
+            Editá directamente los días y horarios
+            de clase
           </p>
         </div>
-        <div className="flex gap-3">
+
+        <div
+          className="
+            flex flex-col gap-3
+            sm:flex-row sm:items-center
+          "
+        >
           {hasChanges && (
             <button
-              onClick={() => setHorarios(original)}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 font-semibold text-slate-600"
+              type="button"
+              onClick={deshacer}
+              disabled={saving}
+              className="
+                flex items-center justify-center
+                gap-2 rounded-2xl border
+                border-slate-300 bg-white
+                px-4 py-3 font-semibold
+                text-slate-700 shadow-sm
+                transition-colors
+                hover:bg-slate-50
+                focus:outline-none focus:ring-4
+                focus:ring-slate-100
+                disabled:cursor-not-allowed
+                disabled:opacity-50
+              "
             >
               <RotateCcw className="h-4 w-4" />
+
               Deshacer
             </button>
           )}
+
           <button
-            onClick={guardar}
+            type="button"
+            onClick={() => void guardar()}
             disabled={!hasChanges || saving}
-            className="flex items-center gap-2 rounded-2xl bg-pink-600 px-5 py-3 font-semibold text-white disabled:bg-slate-300"
+            className="
+              flex items-center justify-center
+              gap-2 rounded-2xl bg-pink-600
+              px-5 py-3 font-semibold
+              text-white shadow-sm
+              transition-colors
+              hover:bg-pink-700
+              focus:outline-none focus:ring-4
+              focus:ring-pink-200
+              disabled:cursor-not-allowed
+              disabled:bg-slate-300
+              disabled:text-slate-500
+              disabled:shadow-none
+            "
           >
             <Save className="h-4 w-4" />
-            {saving ? "Guardando..." : "Guardar cambios"}
+
+            {saving
+              ? "Guardando..."
+              : "Guardar cambios"}
           </button>
         </div>
       </div>
+
       {error && (
-        <div className="rounded-2xl bg-red-50 px-4 py-3 text-red-700">
+        <div
+          className="
+            rounded-2xl border border-red-200
+            bg-red-50 px-4 py-3
+            text-sm font-medium text-red-700
+          "
+        >
           {error}
         </div>
       )}
-      <Card className="overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+      <Card className="overflow-visible p-0">
+        <div
+          className="
+            flex flex-col gap-4
+            rounded-t-3xl
+            border-b border-slate-200
+            px-6 py-5
+            md:flex-row md:items-center
+            md:justify-between
+          "
+        >
           <div>
-            <h2 className="text-xl font-bold">Planilla de horarios</h2>
+            <h2 className="text-xl font-bold text-slate-900">
+              Planilla de horarios
+            </h2>
+
             <p className="mt-1 text-sm text-slate-500">
-              Los horarios con asistencias asociadas deben desactivarse.
+              Los horarios con asistencias asociadas
+              deben desactivarse.
             </p>
           </div>
+
           <button
+            type="button"
             onClick={agregar}
-            className="flex items-center gap-2 rounded-2xl bg-pink-50 px-4 py-3 font-semibold text-pink-700"
+            disabled={saving}
+            className="
+              flex items-center justify-center
+              gap-2 rounded-2xl
+              border border-pink-200
+              bg-pink-50 px-4 py-3
+              font-semibold text-pink-700
+              transition-colors
+              hover:border-pink-300
+              hover:bg-pink-100
+              focus:outline-none focus:ring-4
+              focus:ring-pink-100
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+            "
           >
             <Plus className="h-4 w-4" />
+
             Agregar fila
           </button>
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px]">
+          <table className="w-full min-w-[1050px] border-collapse">
             <thead>
-              <tr className="border-b bg-slate-50 text-left">
-                {[
-                  "Día",
-                  "Inicio",
-                  "Fin",
-                  "Estado",
-                  "Observaciones",
-                  "Acción",
-                ].map((x) => (
-                  <th
-                    key={x}
-                    className="px-4 py-4 text-sm font-semibold text-slate-600"
-                  >
-                    {x}
-                  </th>
-                ))}
+              <tr
+                className="
+                  border-b border-slate-200
+                  bg-[#F5F9FF] text-left
+                "
+              >
+                <TableHeader>Día</TableHeader>
+                <TableHeader>Inicio</TableHeader>
+                <TableHeader>Fin</TableHeader>
+                <TableHeader>Estado</TableHeader>
+                <TableHeader>
+                  Observaciones
+                </TableHeader>
+                <TableHeader>Acción</TableHeader>
               </tr>
             </thead>
+
             <tbody>
-              {loading ? (
+              {loading && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="
+                      px-6 py-12 text-center
+                      text-slate-500
+                    "
+                  >
                     Cargando horarios...
                   </td>
                 </tr>
-              ) : (
-                horarios.map((h) => (
+              )}
+
+              {!loading &&
+                horariosOrdenados.map((horario) => (
                   <tr
-                    key={h.id}
-                    className={`border-b ${!h.activo ? "bg-slate-50 opacity-60" : ""}`}
+                    key={horario.id}
+                    className={`
+                      border-b border-slate-100
+                      transition-colors
+                      ${
+                        horario.activo
+                          ? "bg-white hover:bg-[#FFF5F9]"
+                          : "bg-slate-50"
+                      }
+                    `}
                   >
-                    <td className="p-4">
-                      <select
-                        value={h.diaSemana}
-                        onChange={(e) =>
-                          update(h.id, "diaSemana", e.target.value)
+                    <td className="px-4 py-4">
+                      <Select
+                        value={horario.diaSemana}
+                        onChange={(value) =>
+                          update(
+                            horario.id,
+                            "diaSemana",
+                            value,
+                          )
                         }
-                        className="w-full rounded-xl border p-2"
+                        disabled={saving}
                       >
-                        {diasSemana.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            {d.label}
+                        {diasSemana.map((dia) => (
+                          <option
+                            key={dia.value}
+                            value={dia.value}
+                          >
+                            {dia.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </td>
-                    <td className="p-4">
+
+                    <td className="px-4 py-4">
                       <TimeSelect
-                        value={h.horaInicio}
-                        onChange={(v) => update(h.id, "horaInicio", v)}
+                        value={horario.horaInicio}
+                        onChange={(value) =>
+                          update(
+                            horario.id,
+                            "horaInicio",
+                            value,
+                          )
+                        }
+                        disabled={saving}
+                        required
                       />
                     </td>
-                    <td className="p-4">
+
+                    <td className="px-4 py-4">
                       <TimeSelect
-                        value={h.horaFin}
-                        onChange={(v) => update(h.id, "horaFin", v)}
+                        value={horario.horaFin}
+                        onChange={(value) =>
+                          update(
+                            horario.id,
+                            "horaFin",
+                            value,
+                          )
+                        }
+                        disabled={saving}
+                        allowEmpty
                       />
                     </td>
-                    <td className="p-4">
+
+                    <td className="px-4 py-4">
                       <button
-                        onClick={() => update(h.id, "activo", !h.activo)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${h.activo ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}
+                        type="button"
+                        onClick={() =>
+                          update(
+                            horario.id,
+                            "activo",
+                            !horario.activo,
+                          )
+                        }
+                        disabled={saving}
+                        className={`
+                          rounded-full px-3 py-1.5
+                          text-xs font-semibold
+                          transition-colors
+                          focus:outline-none focus:ring-4
+                          disabled:cursor-not-allowed
+                          disabled:opacity-50
+                          ${
+                            horario.activo
+                              ? `
+                                bg-green-100
+                                text-green-700
+                                hover:bg-green-200
+                                focus:ring-green-100
+                              `
+                              : `
+                                bg-slate-200
+                                text-slate-600
+                                hover:bg-slate-300
+                                focus:ring-slate-100
+                              `
+                          }
+                        `}
                       >
-                        {h.activo ? "Activo" : "Inactivo"}
+                        {horario.activo
+                          ? "Activo"
+                          : "Inactivo"}
                       </button>
                     </td>
-                    <td className="p-4">
+
+                    <td className="px-4 py-4">
                       <input
-                        value={h.observaciones}
-                        onChange={(e) =>
-                          update(h.id, "observaciones", e.target.value)
+                        type="text"
+                        value={horario.observaciones}
+                        disabled={saving}
+                        onChange={(event) =>
+                          update(
+                            horario.id,
+                            "observaciones",
+                            event.target.value,
+                          )
                         }
-                        className="w-full rounded-xl border p-2"
                         placeholder="Opcional"
+                        className="
+                          w-full min-w-[220px]
+                          rounded-2xl border
+                          border-slate-300
+                          bg-[#F5F9FF]
+                          px-4 py-3 text-slate-900
+                          shadow-sm outline-none
+                          transition-colors
+                          placeholder:text-slate-400
+                          hover:border-slate-400
+                          focus:border-pink-400
+                          focus:bg-white
+                          focus:ring-4
+                          focus:ring-pink-100
+                          disabled:cursor-not-allowed
+                          disabled:opacity-60
+                        "
                       />
                     </td>
-                    <td className="p-4">
+
+                    <td className="px-4 py-4">
                       <button
-                        onClick={() => void quitar(h)}
-                        className="rounded-xl p-2 text-red-500 hover:bg-red-50"
+                        type="button"
+                        onClick={() =>
+                          void quitar(horario)
+                        }
+                        disabled={saving}
+                        className="
+                          rounded-xl p-2.5
+                          text-red-500
+                          transition-colors
+                          hover:bg-red-50
+                          hover:text-red-700
+                          focus:outline-none
+                          focus:ring-4
+                          focus:ring-red-100
+                          disabled:cursor-not-allowed
+                          disabled:opacity-50
+                        "
+                        aria-label="Eliminar horario"
+                        title="Eliminar horario"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
+
+              {!loading &&
+                horariosOrdenados.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="
+                        px-6 py-12 text-center
+                        text-slate-500
+                      "
+                    >
+                      No hay horarios registrados.
+                    </td>
+                  </tr>
+                )}
             </tbody>
           </table>
         </div>
@@ -294,44 +754,120 @@ export default function HorariosPage() {
     </div>
   );
 }
+
+function TableHeader({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <th
+      className="
+        whitespace-nowrap px-4 py-4
+        text-sm font-semibold text-slate-700
+      "
+    >
+      {children}
+    </th>
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  children,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(event) =>
+        onChange(event.target.value)
+      }
+      className="
+        w-full min-w-[145px]
+        rounded-2xl border
+        border-slate-300 bg-[#F5F9FF]
+        px-4 py-3 text-slate-900
+        shadow-sm outline-none
+        transition-colors
+        hover:border-slate-400
+        focus:border-pink-400
+        focus:bg-white
+        focus:ring-4
+        focus:ring-pink-100
+        disabled:cursor-not-allowed
+        disabled:opacity-60
+      "
+    >
+      {children}
+    </select>
+  );
+}
+
 function TimeSelect({
   value,
   onChange,
+  disabled = false,
+  allowEmpty = false,
+  required = false,
 }: {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  allowEmpty?: boolean;
+  required?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const horas = Array.from({ length: 24 }, (_, h) =>
-    ["00", "15", "30", "45"].map((m) => `${String(h).padStart(2, "0")}:${m}`),
-  ).flat();
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2"
+    <div className="relative min-w-[145px]">
+      <select
+        value={value}
+        disabled={disabled}
+        required={required}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="
+          w-full appearance-none
+          rounded-2xl border
+          border-slate-300 bg-[#F5F9FF]
+          px-4 py-3 pr-10
+          font-medium text-slate-900
+          shadow-sm outline-none
+          transition-colors
+          hover:border-slate-400
+          focus:border-pink-400
+          focus:bg-white
+          focus:ring-4
+          focus:ring-pink-100
+          disabled:cursor-not-allowed
+          disabled:opacity-60
+        "
       >
-        <span>{value || "HH:MM"}</span>
-        <Clock className="h-4 w-4 text-slate-400" />
-      </button>
-      {open && (
-        <div className="absolute z-50 max-h-56 w-full overflow-y-auto rounded-2xl border bg-white p-2 shadow-xl">
-          {horas.map((x) => (
-            <button
-              key={x}
-              type="button"
-              onClick={() => {
-                onChange(x);
-                setOpen(false);
-              }}
-              className={`w-full rounded-xl px-3 py-2 text-left text-sm ${value === x ? "bg-pink-600 text-white" : "hover:bg-pink-50"}`}
-            >
-              {x}
-            </button>
-          ))}
-        </div>
-      )}
+        {allowEmpty && (
+          <option value="">Sin hora</option>
+        )}
+
+        {opcionesHora.map((hora) => (
+          <option key={hora} value={hora}>
+            {hora}
+          </option>
+        ))}
+      </select>
+
+      <Clock
+        className="
+          pointer-events-none absolute
+          right-3 top-1/2 h-4 w-4
+          -translate-y-1/2 text-slate-400
+        "
+      />
     </div>
   );
 }
