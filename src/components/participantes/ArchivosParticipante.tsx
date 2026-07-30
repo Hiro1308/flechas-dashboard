@@ -45,11 +45,7 @@ type TipoFiltro =
 
 type TipoVista = "lista" | "cuadricula";
 
-type TipoOrden =
-  | "fecha_desc"
-  | "fecha_asc"
-  | "nombre_asc"
-  | "nombre_desc";
+type TipoOrden = "fecha_desc" | "fecha_asc" | "nombre_asc" | "nombre_desc";
 
 type ArchivosParticipanteProps = {
   idParticipante: string;
@@ -95,32 +91,19 @@ function obtenerNombreSinExtension(nombre: string) {
   return nombre.slice(0, -(extension.length + 1));
 }
 
-function obtenerCategoria(
-  tipo: string | null,
-  nombre: string,
-): TipoFiltro {
+function obtenerCategoria(tipo: string | null, nombre: string): TipoFiltro {
   const mime = tipo?.toLowerCase() ?? "";
   const extension = obtenerExtension(nombre);
 
-  if (
-    mime === "application/pdf" ||
-    extension === "pdf"
-  ) {
+  if (mime === "application/pdf" || extension === "pdf") {
     return "pdf";
   }
 
   if (
     mime.startsWith("image/") ||
-    [
-      "jpg",
-      "jpeg",
-      "png",
-      "gif",
-      "webp",
-      "svg",
-      "bmp",
-      "avif",
-    ].includes(extension)
+    ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"].includes(
+      extension,
+    )
   ) {
     return "imagen";
   }
@@ -143,9 +126,7 @@ function obtenerCategoria(
 
   if (
     mime.startsWith("text/") ||
-    ["txt", "md", "json", "xml", "html", "css"].includes(
-      extension,
-    )
+    ["txt", "md", "json", "xml", "html", "css"].includes(extension)
   ) {
     return "texto";
   }
@@ -153,10 +134,7 @@ function obtenerCategoria(
   return "otro";
 }
 
-function obtenerNombreTipo(
-  tipo: string | null,
-  nombre: string,
-) {
+function obtenerNombreTipo(tipo: string | null, nombre: string) {
   const categoria = obtenerCategoria(tipo, nombre);
 
   const nombres: Record<TipoFiltro, string> = {
@@ -211,14 +189,10 @@ function compararPorNombre(
   primerArchivo: ArchivoParticipante,
   segundoArchivo: ArchivoParticipante,
 ) {
-  return primerArchivo.nombre.localeCompare(
-    segundoArchivo.nombre,
-    "es",
-    {
-      sensitivity: "base",
-      numeric: true,
-    },
-  );
+  return primerArchivo.nombre.localeCompare(segundoArchivo.nombre, "es", {
+    sensitivity: "base",
+    numeric: true,
+  });
 }
 
 function obtenerTimestamp(value: string) {
@@ -240,19 +214,10 @@ function formatearTamanoArchivo(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function admiteVistaPrevia(
-  archivo: ArchivoParticipante,
-) {
-  const categoria = obtenerCategoria(
-    archivo.tipo,
-    archivo.nombre,
-  );
+function admiteVistaPrevia(archivo: ArchivoParticipante) {
+  const categoria = obtenerCategoria(archivo.tipo, archivo.nombre);
 
-  return (
-    categoria === "imagen" ||
-    categoria === "pdf" ||
-    categoria === "texto"
-  );
+  return categoria === "imagen" || categoria === "pdf" || categoria === "texto";
 }
 
 export default function ArchivosParticipante({
@@ -263,123 +228,82 @@ export default function ArchivosParticipante({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [busqueda, setBusqueda] = useState("");
-  const [tipoFiltro, setTipoFiltro] =
-    useState<TipoFiltro>("todos");
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>("todos");
 
-  const [tipoVista, setTipoVista] =
-    useState<TipoVista>("lista");
+  const [tipoVista, setTipoVista] = useState<TipoVista>("lista");
 
-  const [tipoOrden, setTipoOrden] =
-    useState<TipoOrden>("fecha_desc");
+  const [tipoOrden, setTipoOrden] = useState<TipoOrden>("fecha_desc");
 
-  const [modalSubidaAbierto, setModalSubidaAbierto] =
-    useState(false);
+  const [modalSubidaAbierto, setModalSubidaAbierto] = useState(false);
 
-  const [archivoSeleccionado, setArchivoSeleccionado] =
-    useState<File | null>(null);
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(
+    null,
+  );
 
-  const [nombreArchivo, setNombreArchivo] =
-    useState("");
+  const [nombreArchivo, setNombreArchivo] = useState("");
 
-  const [arrastrando, setArrastrando] =
-    useState(false);
+  const [arrastrando, setArrastrando] = useState(false);
 
-  const [uploading, setUploading] =
-    useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const [deletingId, setDeletingId] =
-    useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [error, setError] = useState("");
-  const [errorModal, setErrorModal] =
-    useState("");
+  const [errorModal, setErrorModal] = useState("");
 
   const [success, setSuccess] = useState("");
 
   const [archivoVistaPrevia, setArchivoVistaPrevia] =
     useState<ArchivoParticipante | null>(null);
 
-  const [urlVistaPrevia, setUrlVistaPrevia] =
-    useState("");
+  const [urlVistaPrevia, setUrlVistaPrevia] = useState("");
 
-  const [cargandoVistaPrevia, setCargandoVistaPrevia] =
-    useState(false);
+  const [cargandoVistaPrevia, setCargandoVistaPrevia] = useState(false);
 
-  const [errorVistaPrevia, setErrorVistaPrevia] =
-    useState("");
+  const [errorVistaPrevia, setErrorVistaPrevia] = useState("");
 
-  const [urlsMiniatura, setUrlsMiniatura] = useState<
-    Record<string, string>
-  >({});
+  const [urlsMiniatura, setUrlsMiniatura] = useState<Record<string, string>>(
+    {},
+  );
 
   const archivosFiltrados = useMemo(() => {
-    const textoBusqueda = busqueda
-      .trim()
-      .toLocaleLowerCase("es");
+    const textoBusqueda = busqueda.trim().toLocaleLowerCase("es");
 
     const resultado = archivos.filter((archivo) => {
       const coincideNombre =
         !textoBusqueda ||
-        archivo.nombre
-          .toLocaleLowerCase("es")
-          .includes(textoBusqueda);
+        archivo.nombre.toLocaleLowerCase("es").includes(textoBusqueda);
 
-      const categoria = obtenerCategoria(
-        archivo.tipo,
-        archivo.nombre,
-      );
+      const categoria = obtenerCategoria(archivo.tipo, archivo.nombre);
 
-      const coincideTipo =
-        tipoFiltro === "todos" ||
-        categoria === tipoFiltro;
+      const coincideTipo = tipoFiltro === "todos" || categoria === tipoFiltro;
 
       return coincideNombre && coincideTipo;
     });
 
-    return [...resultado].sort(
-      (primerArchivo, segundoArchivo) => {
-        switch (tipoOrden) {
-          case "fecha_asc":
-            return (
-              obtenerTimestamp(
-                primerArchivo.created_at,
-              ) -
-              obtenerTimestamp(
-                segundoArchivo.created_at,
-              )
-            );
+    return [...resultado].sort((primerArchivo, segundoArchivo) => {
+      switch (tipoOrden) {
+        case "fecha_asc":
+          return (
+            obtenerTimestamp(primerArchivo.created_at) -
+            obtenerTimestamp(segundoArchivo.created_at)
+          );
 
-          case "nombre_asc":
-            return compararPorNombre(
-              primerArchivo,
-              segundoArchivo,
-            );
+        case "nombre_asc":
+          return compararPorNombre(primerArchivo, segundoArchivo);
 
-          case "nombre_desc":
-            return compararPorNombre(
-              segundoArchivo,
-              primerArchivo,
-            );
+        case "nombre_desc":
+          return compararPorNombre(segundoArchivo, primerArchivo);
 
-          case "fecha_desc":
-          default:
-            return (
-              obtenerTimestamp(
-                segundoArchivo.created_at,
-              ) -
-              obtenerTimestamp(
-                primerArchivo.created_at,
-              )
-            );
-        }
-      },
-    );
-  }, [
-    archivos,
-    busqueda,
-    tipoFiltro,
-    tipoOrden,
-  ]);
+        case "fecha_desc":
+        default:
+          return (
+            obtenerTimestamp(segundoArchivo.created_at) -
+            obtenerTimestamp(primerArchivo.created_at)
+          );
+      }
+    });
+  }, [archivos, busqueda, tipoFiltro, tipoOrden]);
 
   useEffect(() => {
     if (tipoVista !== "cuadricula") {
@@ -389,12 +313,9 @@ export default function ArchivosParticipante({
     let cancelado = false;
 
     const cargarMiniaturas = async () => {
-      const archivosCompatibles =
-        archivosFiltrados.filter(
-          (archivo) =>
-            admiteVistaPrevia(archivo) &&
-            !urlsMiniatura[archivo.id],
-        );
+      const archivosCompatibles = archivosFiltrados.filter(
+        (archivo) => admiteVistaPrevia(archivo) && !urlsMiniatura[archivo.id],
+      );
 
       if (archivosCompatibles.length === 0) {
         return;
@@ -412,22 +333,17 @@ export default function ArchivosParticipante({
             return;
           }
 
-          const { data, error: signedUrlError } =
-            await supabase.storage
-              .from("participantes-archivos")
-              .createSignedUrl(archivo.url, 3600);
+          const { data, error: signedUrlError } = await supabase.storage
+            .from("participantes-archivos")
+            .createSignedUrl(archivo.url, 3600);
 
           if (!signedUrlError && data?.signedUrl) {
-            nuevasUrls[archivo.id] =
-              data.signedUrl;
+            nuevasUrls[archivo.id] = data.signedUrl;
           }
         }),
       );
 
-      if (
-        !cancelado &&
-        Object.keys(nuevasUrls).length > 0
-      ) {
+      if (!cancelado && Object.keys(nuevasUrls).length > 0) {
         setUrlsMiniatura((actuales) => ({
           ...actuales,
           ...nuevasUrls,
@@ -440,11 +356,7 @@ export default function ArchivosParticipante({
     return () => {
       cancelado = true;
     };
-  }, [
-    archivosFiltrados,
-    tipoVista,
-    urlsMiniatura,
-  ]);
+  }, [archivosFiltrados, tipoVista, urlsMiniatura]);
 
   const limpiarMensajes = () => {
     setError("");
@@ -494,23 +406,17 @@ export default function ArchivosParticipante({
       setArchivoSeleccionado(null);
       setNombreArchivo("");
 
-      setErrorModal(
-        "El archivo supera el máximo permitido de 50 MB.",
-      );
+      setErrorModal("El archivo supera el máximo permitido de 50 MB.");
 
       return;
     }
 
     setArchivoSeleccionado(archivo);
 
-    setNombreArchivo(
-      obtenerNombreSinExtension(archivo.name),
-    );
+    setNombreArchivo(obtenerNombreSinExtension(archivo.name));
   };
 
-  const manejarSeleccionArchivo = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
+  const manejarSeleccionArchivo = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0];
 
     if (!archivo) {
@@ -520,18 +426,14 @@ export default function ArchivosParticipante({
     seleccionarArchivo(archivo);
   };
 
-  const manejarDragEnter = (
-    event: DragEvent<HTMLDivElement>,
-  ) => {
+  const manejarDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
     setArrastrando(true);
   };
 
-  const manejarDragOver = (
-    event: DragEvent<HTMLDivElement>,
-  ) => {
+  const manejarDragOver = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -539,18 +441,14 @@ export default function ArchivosParticipante({
     setArrastrando(true);
   };
 
-  const manejarDragLeave = (
-    event: DragEvent<HTMLDivElement>,
-  ) => {
+  const manejarDragLeave = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
     setArrastrando(false);
   };
 
-  const manejarDrop = (
-    event: DragEvent<HTMLDivElement>,
-  ) => {
+  const manejarDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -577,9 +475,7 @@ export default function ArchivosParticipante({
 
   const subirArchivo = async () => {
     if (!archivoSeleccionado) {
-      setErrorModal(
-        "Seleccioná un archivo para continuar.",
-      );
+      setErrorModal("Seleccioná un archivo para continuar.");
 
       return;
     }
@@ -587,9 +483,7 @@ export default function ArchivosParticipante({
     const nombreIngresado = nombreArchivo.trim();
 
     if (!nombreIngresado) {
-      setErrorModal(
-        "Ingresá un nombre para el archivo.",
-      );
+      setErrorModal("Ingresá un nombre para el archivo.");
 
       return;
     }
@@ -598,17 +492,13 @@ export default function ArchivosParticipante({
     setErrorModal("");
     setUploading(true);
 
-    const extensionOriginal = obtenerExtension(
-      archivoSeleccionado.name,
-    );
+    const extensionOriginal = obtenerExtension(archivoSeleccionado.name);
 
     const nombreSinExtensionIngresada =
       obtenerNombreSinExtension(nombreIngresado).trim();
 
     if (!nombreSinExtensionIngresada) {
-      setErrorModal(
-        "Ingresá un nombre válido para el archivo.",
-      );
+      setErrorModal("Ingresá un nombre válido para el archivo.");
 
       setUploading(false);
       return;
@@ -620,39 +510,26 @@ export default function ArchivosParticipante({
       ? `${nombreVisible}.${extensionOriginal}`
       : nombreVisible;
 
-    const nombreSeguro = limpiarNombreArchivo(
-      nombreFisico,
-    );
+    const nombreSeguro = limpiarNombreArchivo(nombreFisico);
 
     const carpetaCarga = Date.now().toString();
 
-    const rutaStorage =
-      `${idParticipante}/${carpetaCarga}/${nombreSeguro}`;
+    const rutaStorage = `${idParticipante}/${carpetaCarga}/${nombreSeguro}`;
 
     try {
-      const { error: uploadError } =
-        await supabase.storage
-          .from("participantes-archivos")
-          .upload(
-            rutaStorage,
-            archivoSeleccionado,
-            {
-              cacheControl: "3600",
-              upsert: false,
-              contentType:
-                archivoSeleccionado.type ||
-                "application/octet-stream",
-            },
-          );
+      const { error: uploadError } = await supabase.storage
+        .from("participantes-archivos")
+        .upload(rutaStorage, archivoSeleccionado, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: archivoSeleccionado.type || "application/octet-stream",
+        });
 
       if (uploadError) {
         throw uploadError;
       }
 
-      const {
-        data: archivoGuardado,
-        error: insertError,
-      } = await supabase
+      const { data: archivoGuardado, error: insertError } = await supabase
         .from("archivos_participante")
         .insert({
           id_participante: idParticipante,
@@ -660,10 +537,7 @@ export default function ArchivosParticipante({
           url: rutaStorage,
           tipo:
             archivoSeleccionado.type ||
-            `application/${
-              extensionOriginal ||
-              "octet-stream"
-            }`,
+            `application/${extensionOriginal || "octet-stream"}`,
         })
         .select(
           `
@@ -684,17 +558,12 @@ export default function ArchivosParticipante({
         throw insertError;
       }
 
-      onChange([
-        archivoGuardado as ArchivoParticipante,
-        ...archivos,
-      ]);
+      onChange([archivoGuardado as ArchivoParticipante, ...archivos]);
 
       setModalSubidaAbierto(false);
       reiniciarModalSubida();
 
-      mostrarMensajeExito(
-        "El archivo se subió correctamente.",
-      );
+      mostrarMensajeExito("El archivo se subió correctamente.");
     } catch (uploadError) {
       const mensaje =
         uploadError instanceof Error
@@ -718,18 +587,17 @@ export default function ArchivosParticipante({
       return archivo.url;
     }
 
-    const { data, error: signedUrlError } =
-      await supabase.storage
-        .from("participantes-archivos")
-        .createSignedUrl(
-          archivo.url,
-          600,
-          descargar
-            ? {
-                download: archivo.nombre,
-              }
-            : undefined,
-        );
+    const { data, error: signedUrlError } = await supabase.storage
+      .from("participantes-archivos")
+      .createSignedUrl(
+        archivo.url,
+        600,
+        descargar
+          ? {
+              download: archivo.nombre,
+            }
+          : undefined,
+      );
 
     if (signedUrlError) {
       throw signedUrlError;
@@ -738,22 +606,13 @@ export default function ArchivosParticipante({
     return data.signedUrl;
   };
 
-  const abrirArchivo = async (
-    archivo: ArchivoParticipante,
-  ) => {
+  const abrirArchivo = async (archivo: ArchivoParticipante) => {
     limpiarMensajes();
 
     try {
-      const url = await obtenerUrlArchivo(
-        archivo,
-        true,
-      );
+      const url = await obtenerUrlArchivo(archivo, true);
 
-      window.open(
-        url,
-        "_blank",
-        "noopener,noreferrer",
-      );
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (openError) {
       setError(
         openError instanceof Error
@@ -763,9 +622,7 @@ export default function ArchivosParticipante({
     }
   };
 
-  const abrirVistaPrevia = async (
-    archivo: ArchivoParticipante,
-  ) => {
+  const abrirVistaPrevia = async (archivo: ArchivoParticipante) => {
     setArchivoVistaPrevia(archivo);
     setUrlVistaPrevia("");
     setErrorVistaPrevia("");
@@ -773,8 +630,7 @@ export default function ArchivosParticipante({
 
     try {
       const url =
-        urlsMiniatura[archivo.id] ||
-        (await obtenerUrlArchivo(archivo));
+        urlsMiniatura[archivo.id] || (await obtenerUrlArchivo(archivo));
 
       setUrlVistaPrevia(url);
 
@@ -800,9 +656,7 @@ export default function ArchivosParticipante({
     setCargandoVistaPrevia(false);
   };
 
-  const eliminarArchivo = async (
-    archivo: ArchivoParticipante,
-  ) => {
+  const eliminarArchivo = async (archivo: ArchivoParticipante) => {
     const confirmado = window.confirm(
       `¿Querés eliminar el archivo "${archivo.nombre}"?`,
     );
@@ -815,11 +669,10 @@ export default function ArchivosParticipante({
     setDeletingId(archivo.id);
 
     try {
-      const { error: deleteRowError } =
-        await supabase
-          .from("archivos_participante")
-          .delete()
-          .eq("id", archivo.id);
+      const { error: deleteRowError } = await supabase
+        .from("archivos_participante")
+        .delete()
+        .eq("id", archivo.id);
 
       if (deleteRowError) {
         throw deleteRowError;
@@ -829,10 +682,9 @@ export default function ArchivosParticipante({
         !archivo.url.startsWith("http://") &&
         !archivo.url.startsWith("https://")
       ) {
-        const { error: deleteStorageError } =
-          await supabase.storage
-            .from("participantes-archivos")
-            .remove([archivo.url]);
+        const { error: deleteStorageError } = await supabase.storage
+          .from("participantes-archivos")
+          .remove([archivo.url]);
 
         if (deleteStorageError) {
           setError(
@@ -841,11 +693,7 @@ export default function ArchivosParticipante({
         }
       }
 
-      onChange(
-        archivos.filter(
-          (item) => item.id !== archivo.id,
-        ),
-      );
+      onChange(archivos.filter((item) => item.id !== archivo.id));
 
       setUrlsMiniatura((actuales) => {
         const nuevasUrls = { ...actuales };
@@ -854,15 +702,11 @@ export default function ArchivosParticipante({
         return nuevasUrls;
       });
 
-      if (
-        archivoVistaPrevia?.id === archivo.id
-      ) {
+      if (archivoVistaPrevia?.id === archivo.id) {
         cerrarVistaPrevia();
       }
 
-      mostrarMensajeExito(
-        "El archivo se eliminó correctamente.",
-      );
+      mostrarMensajeExito("El archivo se eliminó correctamente.");
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -874,19 +718,12 @@ export default function ArchivosParticipante({
     }
   };
 
-  const evitarClickTarjeta = (
-    event: MouseEvent<HTMLButtonElement>,
-  ) => {
+  const evitarClickTarjeta = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
 
-  const renderizarMiniatura = (
-    archivo: ArchivoParticipante,
-  ) => {
-    const categoria = obtenerCategoria(
-      archivo.tipo,
-      archivo.nombre,
-    );
+  const renderizarMiniatura = (archivo: ArchivoParticipante) => {
+    const categoria = obtenerCategoria(archivo.tipo, archivo.nombre);
 
     const url = urlsMiniatura[archivo.id];
 
@@ -952,11 +789,7 @@ export default function ArchivosParticipante({
             shadow-sm
           "
         >
-          {obtenerIconoArchivo(
-            archivo.tipo,
-            archivo.nombre,
-            "h-8 w-8",
-          )}
+          {obtenerIconoArchivo(archivo.tipo, archivo.nombre, "h-8 w-8")}
         </div>
 
         <span
@@ -966,10 +799,7 @@ export default function ArchivosParticipante({
             text-slate-400
           "
         >
-          {obtenerNombreTipo(
-            archivo.tipo,
-            archivo.nombre,
-          )}
+          {obtenerNombreTipo(archivo.tipo, archivo.nombre)}
         </span>
       </div>
     );
@@ -984,7 +814,8 @@ export default function ArchivosParticipante({
       return (
         <div
           className="
-            flex h-full min-h-[420px]
+            flex h-full min-h-[300px]
+            sm:min-h-[420px]
             items-center justify-center
           "
         >
@@ -1008,7 +839,8 @@ export default function ArchivosParticipante({
       return (
         <div
           className="
-            flex h-full min-h-[420px]
+            flex h-full min-h-[300px]
+            sm:min-h-[420px]
             items-center justify-center
             p-6 text-center
           "
@@ -1020,9 +852,7 @@ export default function ArchivosParticipante({
               No fue posible cargar la vista previa
             </p>
 
-            <p className="mt-2 text-sm text-red-600">
-              {errorVistaPrevia}
-            </p>
+            <p className="mt-2 text-sm text-red-600">{errorVistaPrevia}</p>
           </div>
         </div>
       );
@@ -1037,7 +867,8 @@ export default function ArchivosParticipante({
       return (
         <div
           className="
-            flex h-full min-h-[420px]
+            flex h-full min-h-[300px]
+            sm:min-h-[420px]
             items-center justify-center
             overflow-auto bg-slate-100 p-5
           "
@@ -1046,7 +877,8 @@ export default function ArchivosParticipante({
             src={urlVistaPrevia}
             alt={archivoVistaPrevia.nombre}
             className="
-              max-h-[72vh] max-w-full
+              max-h-[78dvh] max-w-full
+              sm:max-h-[72vh]
               rounded-2xl object-contain
               shadow-lg
             "
@@ -1055,16 +887,15 @@ export default function ArchivosParticipante({
       );
     }
 
-    if (
-      categoria === "pdf" ||
-      categoria === "texto"
-    ) {
+    if (categoria === "pdf" || categoria === "texto") {
       return (
         <iframe
           src={urlVistaPrevia}
           title={`Vista previa de ${archivoVistaPrevia.nombre}`}
           className="
-            h-[72vh] min-h-[500px]
+            h-[calc(100dvh-72px)]
+            min-h-[320px]
+            sm:h-[72vh] sm:min-h-[500px]
             w-full border-0 bg-white
           "
         />
@@ -1074,7 +905,8 @@ export default function ArchivosParticipante({
     return (
       <div
         className="
-          flex min-h-[500px]
+          flex min-h-[320px]
+          sm:min-h-[500px]
           items-center justify-center
           bg-[#F5F9FF] p-8
           text-center
@@ -1101,16 +933,14 @@ export default function ArchivosParticipante({
           </h3>
 
           <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
-            Este tipo de archivo no puede mostrarse
-            directamente en el navegador. Podés abrirlo
-            para verlo con la aplicación correspondiente.
+            Este tipo de archivo no puede mostrarse directamente en el
+            navegador. Podés abrirlo para verlo con la aplicación
+            correspondiente.
           </p>
 
           <button
             type="button"
-            onClick={() =>
-              void abrirArchivo(archivoVistaPrevia)
-            }
+            onClick={() => void abrirArchivo(archivoVistaPrevia)}
             className="
               mt-6 inline-flex items-center
               justify-center gap-2
@@ -1138,19 +968,19 @@ export default function ArchivosParticipante({
           className="
             flex flex-col gap-4
             border-b border-slate-200
-            px-6 py-5
+            px-4 py-4
+            sm:px-6 sm:py-5
             xl:flex-row xl:items-center
             xl:justify-between
           "
         >
           <div>
-            <h2 className="text-xl font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-slate-900 sm:text-xl">
               Archivos
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Documentos y archivos asociados a la
-              participante.
+              Documentos y archivos asociados a la participante.
             </p>
           </div>
 
@@ -1164,7 +994,7 @@ export default function ArchivosParticipante({
           >
             <div
               className="
-                flex items-center gap-3
+                flex w-full items-center gap-3
                 rounded-2xl border
                 border-slate-300 bg-[#F5F9FF]
                 px-4 py-3 shadow-sm
@@ -1180,9 +1010,7 @@ export default function ArchivosParticipante({
               <input
                 type="search"
                 value={busqueda}
-                onChange={(event) =>
-                  setBusqueda(event.target.value)
-                }
+                onChange={(event) => setBusqueda(event.target.value)}
                 placeholder="Buscar por nombre..."
                 className="
                   w-full min-w-0 bg-transparent
@@ -1197,13 +1025,12 @@ export default function ArchivosParticipante({
             <select
               value={tipoFiltro}
               onChange={(event) =>
-                setTipoFiltro(
-                  event.target.value as TipoFiltro,
-                )
+                setTipoFiltro(event.target.value as TipoFiltro)
               }
               aria-label="Filtrar por tipo de archivo"
               className="
-                rounded-2xl border
+                w-full rounded-2xl border
+                sm:w-auto
                 border-slate-300 bg-[#F5F9FF]
                 px-4 py-3 text-sm
                 font-medium text-slate-700
@@ -1216,35 +1043,24 @@ export default function ArchivosParticipante({
                 focus:ring-pink-100
               "
             >
-              <option value="todos">
-                Todos los tipos
-              </option>
+              <option value="todos">Todos los tipos</option>
               <option value="pdf">PDF</option>
               <option value="imagen">Imágenes</option>
-              <option value="documento">
-                Documentos
-              </option>
-              <option value="planilla">
-                Planillas
-              </option>
-              <option value="texto">
-                Archivos de texto
-              </option>
-              <option value="otro">
-                Otros archivos
-              </option>
+              <option value="documento">Documentos</option>
+              <option value="planilla">Planillas</option>
+              <option value="texto">Archivos de texto</option>
+              <option value="otro">Otros archivos</option>
             </select>
 
             <select
               value={tipoOrden}
               onChange={(event) =>
-                setTipoOrden(
-                  event.target.value as TipoOrden,
-                )
+                setTipoOrden(event.target.value as TipoOrden)
               }
               aria-label="Ordenar archivos"
               className="
-                rounded-2xl border
+                w-full rounded-2xl border
+                sm:w-auto
                 border-slate-300 bg-[#F5F9FF]
                 px-4 py-3 text-sm
                 font-medium text-slate-700
@@ -1257,37 +1073,26 @@ export default function ArchivosParticipante({
                 focus:ring-pink-100
               "
             >
-              <option value="fecha_desc">
-                Mes: más reciente
-              </option>
-              <option value="fecha_asc">
-                Mes: más antiguo
-              </option>
-              <option value="nombre_asc">
-                Nombre: A a Z
-              </option>
-              <option value="nombre_desc">
-                Nombre: Z a A
-              </option>
+              <option value="fecha_desc">Mes: más reciente</option>
+              <option value="fecha_asc">Mes: más antiguo</option>
+              <option value="nombre_asc">Nombre: A a Z</option>
+              <option value="nombre_desc">Nombre: Z a A</option>
             </select>
 
             <div
               className="
-                flex items-center rounded-2xl
+                flex w-full items-center justify-center rounded-2xl
+                sm:w-auto
                 border border-slate-300
                 bg-[#F5F9FF] p-1 shadow-sm
               "
             >
               <button
                 type="button"
-                onClick={() =>
-                  setTipoVista("lista")
-                }
+                onClick={() => setTipoVista("lista")}
                 title="Ver como lista"
                 aria-label="Ver archivos como lista"
-                aria-pressed={
-                  tipoVista === "lista"
-                }
+                aria-pressed={tipoVista === "lista"}
                 className={`
                   flex h-10 w-10 items-center
                   justify-center rounded-xl
@@ -1307,14 +1112,10 @@ export default function ArchivosParticipante({
 
               <button
                 type="button"
-                onClick={() =>
-                  setTipoVista("cuadricula")
-                }
+                onClick={() => setTipoVista("cuadricula")}
                 title="Ver como cuadrícula"
                 aria-label="Ver archivos como cuadrícula"
-                aria-pressed={
-                  tipoVista === "cuadricula"
-                }
+                aria-pressed={tipoVista === "cuadricula"}
                 className={`
                   flex h-10 w-10 items-center
                   justify-center rounded-xl
@@ -1337,8 +1138,9 @@ export default function ArchivosParticipante({
               type="button"
               onClick={abrirModalSubida}
               className="
-                flex items-center justify-center
+                flex w-full items-center justify-center
                 gap-2 rounded-2xl
+                sm:w-auto
                 bg-pink-600 px-5 py-3
                 font-semibold text-white
                 shadow-sm transition-colors
@@ -1356,7 +1158,8 @@ export default function ArchivosParticipante({
         {error && (
           <div
             className="
-              mx-6 mt-5 rounded-2xl
+              mx-4 mt-4 rounded-2xl
+              sm:mx-6 sm:mt-5
               border border-red-200
               bg-red-50 px-4 py-3
               text-sm font-medium text-red-700
@@ -1369,7 +1172,8 @@ export default function ArchivosParticipante({
         {success && (
           <div
             className="
-              mx-6 mt-5 rounded-2xl
+              mx-4 mt-4 rounded-2xl
+              sm:mx-6 sm:mt-5
               border border-green-200
               bg-green-50 px-4 py-3
               text-sm font-medium text-green-700
@@ -1379,12 +1183,10 @@ export default function ArchivosParticipante({
           </div>
         )}
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="mb-4 text-sm text-slate-500">
             {archivosFiltrados.length}{" "}
-            {archivosFiltrados.length === 1
-              ? "archivo"
-              : "archivos"}
+            {archivosFiltrados.length === 1 ? "archivo" : "archivos"}
           </div>
 
           {archivosFiltrados.length === 0 ? (
@@ -1392,7 +1194,8 @@ export default function ArchivosParticipante({
               className="
                 rounded-3xl border
                 border-dashed border-slate-300
-                bg-[#F5F9FF] px-6 py-12
+                bg-[#F5F9FF] px-4 py-10
+                sm:px-6 sm:py-12
                 text-center
               "
             >
@@ -1403,8 +1206,7 @@ export default function ArchivosParticipante({
               </h3>
 
               <p className="mt-2 text-sm text-slate-500">
-                Subí un archivo o modificá los
-                filtros seleccionados.
+                Subí un archivo o modificá los filtros seleccionados.
               </p>
             </div>
           ) : tipoVista === "lista" ? (
@@ -1424,39 +1226,28 @@ export default function ArchivosParticipante({
                 <span>Archivo</span>
                 <span>Tipo</span>
                 <span>Fecha</span>
-                <span className="text-right">
-                  Acciones
-                </span>
+                <span className="text-right">Acciones</span>
               </div>
 
               <div className="divide-y divide-slate-200">
-                {archivosFiltrados.map(
-                  (archivo) => (
-                    <article
-                      key={archivo.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() =>
-                        void abrirVistaPrevia(
-                          archivo,
-                        )
-                      }
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" ||
-                          event.key === " "
-                        ) {
-                          event.preventDefault();
+                {archivosFiltrados.map((archivo) => (
+                  <article
+                    key={archivo.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void abrirVistaPrevia(archivo)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
 
-                          void abrirVistaPrevia(
-                            archivo,
-                          );
-                        }
-                      }}
-                      className="
+                        void abrirVistaPrevia(archivo);
+                      }
+                    }}
+                    className="
                         flex cursor-pointer
                         flex-col gap-4 bg-white
-                        px-5 py-4
+                        px-4 py-4
+                        sm:px-5
                         transition-colors
                         hover:bg-[#FFF5F9]
                         focus:outline-none
@@ -1467,15 +1258,15 @@ export default function ArchivosParticipante({
                         md:grid-cols-[minmax(0,1fr)_150px_190px_110px]
                         md:items-center
                       "
-                    >
-                      <div
-                        className="
+                  >
+                    <div
+                      className="
                           flex min-w-0
                           items-center gap-3
                         "
-                      >
-                        <div
-                          className="
+                    >
+                      <div
+                        className="
                             flex h-11 w-11
                             shrink-0 items-center
                             justify-center
@@ -1483,40 +1274,32 @@ export default function ArchivosParticipante({
                             bg-[#F5F9FF]
                             text-pink-600
                           "
-                        >
-                          {obtenerIconoArchivo(
-                            archivo.tipo,
-                            archivo.nombre,
-                          )}
-                        </div>
+                      >
+                        {obtenerIconoArchivo(archivo.tipo, archivo.nombre)}
+                      </div>
 
-                        <div className="min-w-0">
-                          <h3
-                            className="
+                      <div className="min-w-0">
+                        <h3
+                          className="
                               truncate font-bold
                               text-slate-900
                             "
-                            title={archivo.nombre}
-                          >
-                            {archivo.nombre}
-                          </h3>
+                          title={archivo.nombre}
+                        >
+                          {archivo.nombre}
+                        </h3>
 
-                          <p className="mt-1 text-xs text-slate-400 md:hidden">
-                            {obtenerNombreTipo(
-                              archivo.tipo,
-                              archivo.nombre,
-                            )}
-                            {" · "}
-                            {formatearFechaHora(
-                              archivo.created_at,
-                            )}
-                          </p>
-                        </div>
+                        <p className="mt-1 text-xs text-slate-400 md:hidden">
+                          {obtenerNombreTipo(archivo.tipo, archivo.nombre)}
+                          {" · "}
+                          {formatearFechaHora(archivo.created_at)}
+                        </p>
                       </div>
+                    </div>
 
-                      <div className="hidden md:block">
-                        <span
-                          className="
+                    <div className="hidden md:block">
+                      <span
+                        className="
                             inline-flex
                             rounded-full border
                             border-slate-200
@@ -1525,38 +1308,31 @@ export default function ArchivosParticipante({
                             text-xs font-semibold
                             text-slate-600
                           "
-                        >
-                          {obtenerNombreTipo(
-                            archivo.tipo,
-                            archivo.nombre,
-                          )}
-                        </span>
-                      </div>
+                      >
+                        {obtenerNombreTipo(archivo.tipo, archivo.nombre)}
+                      </span>
+                    </div>
 
-                      <p className="hidden text-sm text-slate-500 md:block">
-                        {formatearFechaHora(
-                          archivo.created_at,
-                        )}
-                      </p>
+                    <p className="hidden text-sm text-slate-500 md:block">
+                      {formatearFechaHora(archivo.created_at)}
+                    </p>
 
-                      <div
-                        className="
-                          flex items-center gap-2
+                    <div
+                      className="
+                          flex items-center justify-end gap-2
                           md:justify-end
                         "
-                      >
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            evitarClickTarjeta(event);
+                    >
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          evitarClickTarjeta(event);
 
-                            void abrirVistaPrevia(
-                              archivo,
-                            );
-                          }}
-                          title="Vista previa"
-                          aria-label={`Ver ${archivo.nombre}`}
-                          className="
+                          void abrirVistaPrevia(archivo);
+                        }}
+                        title="Vista previa"
+                        aria-label={`Ver ${archivo.nombre}`}
+                        className="
                             flex h-10 w-10
                             items-center justify-center
                             rounded-xl border
@@ -1570,26 +1346,21 @@ export default function ArchivosParticipante({
                             focus:ring-4
                             focus:ring-pink-100
                           "
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
 
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            evitarClickTarjeta(event);
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          evitarClickTarjeta(event);
 
-                            void eliminarArchivo(
-                              archivo,
-                            );
-                          }}
-                          disabled={
-                            deletingId ===
-                            archivo.id
-                          }
-                          title="Eliminar archivo"
-                          aria-label={`Eliminar ${archivo.nombre}`}
-                          className="
+                          void eliminarArchivo(archivo);
+                        }}
+                        disabled={deletingId === archivo.id}
+                        title="Eliminar archivo"
+                        aria-label={`Eliminar ${archivo.nombre}`}
+                        className="
                             flex h-10 w-10
                             items-center justify-center
                             rounded-xl text-red-500
@@ -1602,20 +1373,19 @@ export default function ArchivosParticipante({
                             disabled:cursor-not-allowed
                             disabled:opacity-50
                           "
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </article>
-                  ),
-                )}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           ) : (
             <div
               className="
-                grid grid-cols-1 gap-5
-                sm:grid-cols-2
+                grid grid-cols-1 gap-4
+                sm:grid-cols-2 sm:gap-5
                 xl:grid-cols-3
               "
             >
@@ -1624,19 +1394,12 @@ export default function ArchivosParticipante({
                   key={archivo.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() =>
-                    void abrirVistaPrevia(archivo)
-                  }
+                  onClick={() => void abrirVistaPrevia(archivo)}
                   onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" ||
-                      event.key === " "
-                    ) {
+                    if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
 
-                      void abrirVistaPrevia(
-                        archivo,
-                      );
+                      void abrirVistaPrevia(archivo);
                     }
                   }}
                   className="
@@ -1655,7 +1418,8 @@ export default function ArchivosParticipante({
                 >
                   <div
                     className="
-                      relative h-44
+                      relative h-40
+                      sm:h-44
                       overflow-hidden
                       border-b border-slate-200
                       bg-[#F5F9FF]
@@ -1691,7 +1455,7 @@ export default function ArchivosParticipante({
                     </div>
                   </div>
 
-                  <div className="flex flex-1 flex-col p-5">
+                  <div className="flex flex-1 flex-col p-4 sm:p-5">
                     <div
                       className="
                         flex items-start
@@ -1710,16 +1474,11 @@ export default function ArchivosParticipante({
                         </h3>
 
                         <p className="mt-2 text-sm text-slate-500">
-                          {obtenerNombreTipo(
-                            archivo.tipo,
-                            archivo.nombre,
-                          )}
+                          {obtenerNombreTipo(archivo.tipo, archivo.nombre)}
                         </p>
 
                         <p className="mt-1 text-xs text-slate-400">
-                          {formatearFechaHora(
-                            archivo.created_at,
-                          )}
+                          {formatearFechaHora(archivo.created_at)}
                         </p>
                       </div>
 
@@ -1728,13 +1487,9 @@ export default function ArchivosParticipante({
                         onClick={(event) => {
                           evitarClickTarjeta(event);
 
-                          void eliminarArchivo(
-                            archivo,
-                          );
+                          void eliminarArchivo(archivo);
                         }}
-                        disabled={
-                          deletingId === archivo.id
-                        }
+                        disabled={deletingId === archivo.id}
                         title="Eliminar archivo"
                         aria-label={`Eliminar ${archivo.nombre}`}
                         className="
@@ -1766,8 +1521,9 @@ export default function ArchivosParticipante({
         <div
           className="
             fixed inset-0 z-50
-            flex items-center justify-center
-            bg-slate-950/50 p-4
+            flex items-end justify-center
+            bg-slate-950/50 p-0
+            sm:items-center sm:p-4
             backdrop-blur-sm
           "
           onMouseDown={(event) => {
@@ -1781,8 +1537,10 @@ export default function ArchivosParticipante({
             aria-modal="true"
             aria-labelledby="modal-subir-archivo"
             className="
-              w-full max-w-xl
-              overflow-hidden rounded-3xl
+              flex max-h-[100dvh] w-full max-w-xl
+              flex-col overflow-hidden
+              rounded-t-3xl
+              sm:max-h-[92dvh] sm:rounded-3xl
               border border-slate-200
               bg-white shadow-2xl
             "
@@ -1792,7 +1550,8 @@ export default function ArchivosParticipante({
                 flex items-start
                 justify-between gap-4
                 border-b border-slate-200
-                px-6 py-5
+                px-4 py-4
+                sm:px-6 sm:py-5
               "
             >
               <div>
@@ -1804,8 +1563,8 @@ export default function ArchivosParticipante({
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Seleccioná el archivo y elegí el
-                  nombre con el que se mostrará.
+                  Seleccioná el archivo y elegí el nombre con el que se
+                  mostrará.
                 </p>
               </div>
 
@@ -1832,7 +1591,7 @@ export default function ArchivosParticipante({
               </button>
             </div>
 
-            <div className="space-y-5 px-6 py-6">
+            <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
               <input
                 ref={inputRef}
                 type="file"
@@ -1844,14 +1603,9 @@ export default function ArchivosParticipante({
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() =>
-                    inputRef.current?.click()
-                  }
+                  onClick={() => inputRef.current?.click()}
                   onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" ||
-                      event.key === " "
-                    ) {
+                    if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       inputRef.current?.click();
                     }
@@ -1863,7 +1617,8 @@ export default function ArchivosParticipante({
                   className={`
                     cursor-pointer rounded-3xl
                     border-2 border-dashed
-                    px-6 py-12 text-center
+                    px-4 py-10 text-center
+                    sm:px-6 sm:py-12
                     transition-colors
                     focus:outline-none
                     focus:ring-4
@@ -1891,8 +1646,7 @@ export default function ArchivosParticipante({
                   </h3>
 
                   <p className="mt-2 text-sm text-slate-500">
-                    O hacé clic para seleccionarlo
-                    desde tu dispositivo.
+                    O hacé clic para seleccionarlo desde tu dispositivo.
                   </p>
 
                   <p className="mt-3 text-xs text-slate-400">
@@ -1934,9 +1688,7 @@ export default function ArchivosParticipante({
                     </p>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      {formatearTamanoArchivo(
-                        archivoSeleccionado.size,
-                      )}
+                      {formatearTamanoArchivo(archivoSeleccionado.size)}
                     </p>
                   </div>
 
@@ -1974,10 +1726,7 @@ export default function ArchivosParticipante({
                   "
                 >
                   Nombre del archivo
-                  <span className="text-pink-600">
-                    {" "}
-                    *
-                  </span>
+                  <span className="text-pink-600"> *</span>
                 </label>
 
                 <div
@@ -1996,15 +1745,8 @@ export default function ArchivosParticipante({
                     id="nombre-archivo"
                     type="text"
                     value={nombreArchivo}
-                    onChange={(event) =>
-                      setNombreArchivo(
-                        event.target.value,
-                      )
-                    }
-                    disabled={
-                      !archivoSeleccionado ||
-                      uploading
-                    }
+                    onChange={(event) => setNombreArchivo(event.target.value)}
+                    disabled={!archivoSeleccionado || uploading}
                     placeholder="Ejemplo: Informe médico"
                     className="
                       min-w-0 flex-1
@@ -2041,7 +1783,8 @@ export default function ArchivosParticipante({
               className="
                 flex flex-col-reverse gap-3
                 border-t border-slate-200
-                bg-[#F5F9FF] px-6 py-5
+                bg-[#F5F9FF] px-4 py-4
+                sm:px-6 sm:py-5
                 sm:flex-row sm:justify-end
               "
             >
@@ -2061,6 +1804,7 @@ export default function ArchivosParticipante({
                   focus:ring-slate-200
                   disabled:cursor-not-allowed
                   disabled:opacity-60
+                  sm:w-auto
                 "
               >
                 Cancelar
@@ -2068,13 +1812,9 @@ export default function ArchivosParticipante({
 
               <button
                 type="button"
-                onClick={() =>
-                  void subirArchivo()
-                }
+                onClick={() => void subirArchivo()}
                 disabled={
-                  uploading ||
-                  !archivoSeleccionado ||
-                  !nombreArchivo.trim()
+                  uploading || !archivoSeleccionado || !nombreArchivo.trim()
                 }
                 className="
                   flex items-center
@@ -2089,13 +1829,12 @@ export default function ArchivosParticipante({
                   focus:ring-pink-200
                   disabled:cursor-not-allowed
                   disabled:opacity-60
+                  sm:w-auto
                 "
               >
                 <Upload className="h-4 w-4" />
 
-                {uploading
-                  ? "Subiendo..."
-                  : "Subir archivo"}
+                {uploading ? "Subiendo..." : "Subir archivo"}
               </button>
             </div>
           </div>
@@ -2106,8 +1845,9 @@ export default function ArchivosParticipante({
         <div
           className="
             fixed inset-0 z-[60]
-            flex items-center justify-center
-            bg-slate-950/70 p-4
+            flex items-stretch justify-center
+            bg-slate-950/70 p-0
+            sm:items-center sm:p-4
             backdrop-blur-sm
           "
           onMouseDown={(event) => {
@@ -2121,9 +1861,11 @@ export default function ArchivosParticipante({
             aria-modal="true"
             aria-labelledby="titulo-vista-previa"
             className="
-              flex max-h-[94vh] w-full
+              flex h-dvh w-full
               max-w-6xl flex-col
-              overflow-hidden rounded-3xl
+              overflow-hidden bg-white
+              sm:h-auto sm:max-h-[94vh]
+              sm:rounded-3xl
               border border-slate-200
               bg-white shadow-2xl
             "
@@ -2133,7 +1875,8 @@ export default function ArchivosParticipante({
                 flex items-center
                 justify-between gap-4
                 border-b border-slate-200
-                px-5 py-4
+                px-4 py-3
+                sm:px-5 sm:py-4
               "
             >
               <div className="flex min-w-0 items-center gap-3">
@@ -2168,9 +1911,7 @@ export default function ArchivosParticipante({
                       archivoVistaPrevia.nombre,
                     )}
                     {" · "}
-                    {formatearFechaHora(
-                      archivoVistaPrevia.created_at,
-                    )}
+                    {formatearFechaHora(archivoVistaPrevia.created_at)}
                   </p>
                 </div>
               </div>
@@ -2178,11 +1919,7 @@ export default function ArchivosParticipante({
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    void abrirArchivo(
-                      archivoVistaPrevia,
-                    )
-                  }
+                  onClick={() => void abrirArchivo(archivoVistaPrevia)}
                   title="Abrir archivo"
                   className="
                     flex h-10 items-center
@@ -2201,9 +1938,7 @@ export default function ArchivosParticipante({
                 >
                   <ExternalLink className="h-4 w-4" />
 
-                  <span className="hidden sm:inline">
-                    Abrir
-                  </span>
+                  <span className="hidden sm:inline">Abrir</span>
                 </button>
 
                 <button

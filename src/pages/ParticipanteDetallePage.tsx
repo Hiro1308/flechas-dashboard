@@ -7,10 +7,12 @@ import {
 } from "react";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   Ban,
   CalendarCheck,
   CalendarDays,
+  CheckCircle2,
   ClipboardList,
   FileText,
   HeartPulse,
@@ -19,12 +21,9 @@ import {
   Save,
   User,
   Wallet,
+  X,
 } from "lucide-react";
-import {
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import ArchivosParticipante, {
   type ArchivoParticipante,
@@ -33,11 +32,7 @@ import Card from "../components/ui/Card";
 import FormatHelper from "../helpers/FormatHelper";
 import { supabase } from "../services/supabase";
 
-type Tab =
-  | "datos"
-  | "pagos"
-  | "asistencias"
-  | "archivos";
+type Tab = "datos" | "pagos" | "asistencias" | "archivos";
 
 type Participante = {
   id: string;
@@ -83,13 +78,7 @@ type Asistencia = {
   observaciones: string | null;
 };
 
-type FieldType =
-  | "text"
-  | "email"
-  | "date"
-  | "textarea"
-  | "select"
-  | "cedula";
+type FieldType = "text" | "email" | "date" | "textarea" | "select" | "cedula";
 
 type FieldOption = {
   label: string;
@@ -105,6 +94,46 @@ type EditableField = {
 };
 
 type EditableValues = Record<string, string>;
+
+type ErrorModalState = {
+  open: boolean;
+  title: string;
+  message: string;
+};
+
+type SnackbarState = {
+  open: boolean;
+  type: "success" | "error";
+  message: string;
+};
+
+type ConfirmationModalState = {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  variant: "primary" | "danger";
+};
+
+const ERROR_MODAL_INICIAL: ErrorModalState = {
+  open: false,
+  title: "",
+  message: "",
+};
+
+const SNACKBAR_INICIAL: SnackbarState = {
+  open: false,
+  type: "success",
+  message: "",
+};
+
+const CONFIRMATION_MODAL_INICIAL: ConfirmationModalState = {
+  open: false,
+  title: "",
+  message: "",
+  confirmText: "Confirmar",
+  variant: "primary",
+};
 
 const FOTO_BUCKET = "fotos-participantes";
 const MAX_FOTO_SIZE = 5 * 1024 * 1024;
@@ -139,9 +168,7 @@ const opcionesBooleanas: FieldOption[] = [
   },
 ];
 
-function formatearFecha(
-  value?: string | null,
-) {
+function formatearFecha(value?: string | null) {
   if (!value) {
     return "Sin registrar";
   }
@@ -150,18 +177,10 @@ function formatearFecha(
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(
-    new Date(
-      value.includes("T")
-        ? value
-        : `${value}T00:00:00`,
-    ),
-  );
+  }).format(new Date(value.includes("T") ? value : `${value}T00:00:00`));
 }
 
-function formatearFechaHora(
-  value?: string | null,
-) {
+function formatearFechaHora(value?: string | null) {
   if (!value) {
     return "Sin registrar";
   }
@@ -177,9 +196,7 @@ function formatearFechaHora(
   }).format(new Date(value));
 }
 
-function formatearHora(
-  value?: string | null,
-) {
+function formatearHora(value?: string | null) {
   if (!value) {
     return "—";
   }
@@ -196,10 +213,7 @@ function formatearHora(
   }).format(new Date(value));
 }
 
-function formatearHorario(
-  inicio?: string | null,
-  fin?: string | null,
-) {
+function formatearHorario(inicio?: string | null, fin?: string | null) {
   const horaInicio = formatearHora(inicio);
 
   if (horaInicio === "—") {
@@ -208,42 +222,27 @@ function formatearHorario(
 
   const horaFin = formatearHora(fin);
 
-  return horaFin === "—"
-    ? horaInicio
-    : `${horaInicio} - ${horaFin}`;
+  return horaFin === "—" ? horaInicio : `${horaInicio} - ${horaFin}`;
 }
 
-function obtenerUrlFoto(
-  path?: string | null,
-) {
+function obtenerUrlFoto(path?: string | null) {
   if (!path) {
     return null;
   }
 
-  const { data } = supabase.storage
-    .from(FOTO_BUCKET)
-    .getPublicUrl(path);
+  const { data } = supabase.storage.from(FOTO_BUCKET).getPublicUrl(path);
 
   return data.publicUrl;
 }
 
-function obtenerExtensionFoto(
-  archivo: File,
-) {
-  const extensionNombre = archivo.name
-    .split(".")
-    .pop()
-    ?.toLowerCase();
+function obtenerExtensionFoto(archivo: File) {
+  const extensionNombre = archivo.name.split(".").pop()?.toLowerCase();
 
   if (
     extensionNombre &&
-    ["jpg", "jpeg", "png", "webp"].includes(
-      extensionNombre,
-    )
+    ["jpg", "jpeg", "png", "webp"].includes(extensionNombre)
   ) {
-    return extensionNombre === "jpeg"
-      ? "jpg"
-      : extensionNombre;
+    return extensionNombre === "jpeg" ? "jpg" : extensionNombre;
   }
 
   switch (archivo.type) {
@@ -268,44 +267,30 @@ const participanteToEditableValues = (
     const value = participante[field.key];
 
     if (field.type === "cedula") {
-      values[field.key] =
-        FormatHelper.formatearCedula(
-          value == null
-            ? ""
-            : String(value),
-        );
+      values[field.key] = FormatHelper.formatearCedula(
+        value == null ? "" : String(value),
+      );
 
       return;
     }
 
     if (typeof value === "boolean") {
-      values[field.key] = value
-        ? "true"
-        : "false";
+      values[field.key] = value ? "true" : "false";
 
       return;
     }
 
-    values[field.key] =
-      value == null ? "" : String(value);
+    values[field.key] = value == null ? "" : String(value);
   });
 
   return values;
 };
 
-const areValuesEqual = (
-  original: EditableValues,
-  current: EditableValues,
-) => {
-  const keys = new Set([
-    ...Object.keys(original),
-    ...Object.keys(current),
-  ]);
+const areValuesEqual = (original: EditableValues, current: EditableValues) => {
+  const keys = new Set([...Object.keys(original), ...Object.keys(current)]);
 
   return [...keys].every(
-    (key) =>
-      (original[key] ?? "") ===
-      (current[key] ?? ""),
+    (key) => (original[key] ?? "") === (current[key] ?? ""),
   );
 };
 
@@ -319,65 +304,45 @@ export default function ParticipanteDetallePage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const fotoInputRef =
-    useRef<HTMLInputElement>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
-  const [
-    searchParams,
-    setSearchParams,
-  ] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const rawTab = searchParams.get("tab");
 
   const tab: Tab = (
-    [
-      "datos",
-      "pagos",
-      "asistencias",
-      "archivos",
-    ].includes(rawTab ?? "")
+    ["datos", "pagos", "asistencias", "archivos"].includes(rawTab ?? "")
       ? rawTab
       : "datos"
   ) as Tab;
 
-  const [
-    participante,
-    setParticipante,
-  ] = useState<Participante | null>(null);
+  const [participante, setParticipante] = useState<Participante | null>(null);
 
-  const [pagos, setPagos] = useState<Pago[]>(
-    [],
-  );
+  const [pagos, setPagos] = useState<Pago[]>([]);
 
-  const [
-    asistencias,
-    setAsistencias,
-  ] = useState<Asistencia[]>([]);
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
 
-  const [archivos, setArchivos] = useState<
-    ArchivoParticipante[]
-  >([]);
+  const [archivos, setArchivos] = useState<ArchivoParticipante[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [savingCard, setSavingCard] =
-    useState<string | null>(null);
+  const [savingCard, setSavingCard] = useState<string | null>(null);
 
-  const [changingStatus, setChangingStatus] =
-    useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
 
-  const [uploadingPhoto, setUploadingPhoto] =
-    useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  const [photoVersion, setPhotoVersion] =
-    useState(0);
+  const [photoVersion, setPhotoVersion] = useState(0);
 
-  const [imageError, setImageError] =
-    useState(false);
+  const [imageError, setImageError] = useState(false);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [errorModal, setErrorModal] =
+    useState<ErrorModalState>(ERROR_MODAL_INICIAL);
+
+  const [snackbar, setSnackbar] = useState<SnackbarState>(SNACKBAR_INICIAL);
+
+  const [confirmationModal, setConfirmationModal] =
+    useState<ConfirmationModalState>(CONFIRMATION_MODAL_INICIAL);
 
   useEffect(() => {
     if (!id) {
@@ -386,31 +351,15 @@ export default function ParticipanteDetallePage() {
 
     void (async () => {
       setLoading(true);
-      setError("");
+      setErrorModal(ERROR_MODAL_INICIAL);
 
       const [
-        {
-          data: participanteData,
-          error: participanteError,
-        },
-        {
-          data: pagosData,
-          error: pagosError,
-        },
-        {
-          data: asistenciasData,
-          error: asistenciasError,
-        },
-        {
-          data: archivosData,
-          error: archivosError,
-        },
+        { data: participanteData, error: participanteError },
+        { data: pagosData, error: pagosError },
+        { data: asistenciasData, error: asistenciasError },
+        { data: archivosData, error: archivosError },
       ] = await Promise.all([
-        supabase
-          .from("participantes")
-          .select("*")
-          .eq("id", id)
-          .single(),
+        supabase.from("participantes").select("*").eq("id", id).single(),
 
         supabase
           .from("pagos")
@@ -441,31 +390,24 @@ export default function ParticipanteDetallePage() {
       ]);
 
       const requestError =
-        participanteError ||
-        pagosError ||
-        asistenciasError ||
-        archivosError;
+        participanteError || pagosError || asistenciasError || archivosError;
 
       if (requestError) {
-        setError(requestError.message);
+        setErrorModal({
+          open: true,
+          title: "No se pudo cargar la ficha",
+          message:
+            requestError.message ||
+            "Ocurrió un error al cargar los datos de la participante.",
+        });
       } else {
-        setParticipante(
-          participanteData as Participante,
-        );
+        setParticipante(participanteData as Participante);
 
-        setPagos(
-          (pagosData ?? []) as Pago[],
-        );
+        setPagos((pagosData ?? []) as Pago[]);
 
-        setAsistencias(
-          (asistenciasData ??
-            []) as Asistencia[],
-        );
+        setAsistencias((asistenciasData ?? []) as Asistencia[]);
 
-        setArchivos(
-          (archivosData ??
-            []) as ArchivoParticipante[],
-        );
+        setArchivos((archivosData ?? []) as ArchivoParticipante[]);
       }
 
       setLoading(false);
@@ -476,12 +418,42 @@ export default function ParticipanteDetallePage() {
     setImageError(false);
   }, [participante?.foto_perfil_path]);
 
-  const mostrarExito = (message: string) => {
-    setSuccess(message);
+  const mostrarSnackbar = (
+    message: string,
+    type: "success" | "error" = "success",
+  ) => {
+    setSnackbar({
+      open: true,
+      type,
+      message,
+    });
+  };
 
-    window.setTimeout(() => {
-      setSuccess("");
-    }, 3000);
+  const mostrarError = (
+    message: string,
+    title = "No se pudo completar la operación",
+  ) => {
+    setErrorModal({
+      open: true,
+      title,
+      message,
+    });
+  };
+
+  const cerrarErrorModal = () => {
+    setErrorModal(ERROR_MODAL_INICIAL);
+  };
+
+  const cerrarSnackbar = () => {
+    setSnackbar(SNACKBAR_INICIAL);
+  };
+
+  const cerrarConfirmationModal = () => {
+    if (changingStatus) {
+      return;
+    }
+
+    setConfirmationModal(CONFIRMATION_MODAL_INICIAL);
   };
 
   const guardarParticipante = async (
@@ -493,13 +465,9 @@ export default function ParticipanteDetallePage() {
     }
 
     setSavingCard(cardId);
-    setError("");
-    setSuccess("");
+    setErrorModal(ERROR_MODAL_INICIAL);
 
-    const {
-      data,
-      error: updateError,
-    } = await supabase
+    const { data, error: updateError } = await supabase
       .from("participantes")
       .update(cambios)
       .eq("id", id)
@@ -507,10 +475,10 @@ export default function ParticipanteDetallePage() {
       .single();
 
     if (updateError) {
-      setError(
+      mostrarError(
         updateError.code === "23505"
           ? "Ya existe una participante con esa cédula."
-          : updateError.message,
+          : updateError.message || "No se pudieron guardar los cambios.",
       );
 
       setSavingCard(null);
@@ -520,18 +488,14 @@ export default function ParticipanteDetallePage() {
 
     setParticipante(data as Participante);
 
-    mostrarExito(
-      "Los cambios se guardaron correctamente.",
-    );
+    mostrarSnackbar("Los cambios se guardaron correctamente.");
 
     setSavingCard(null);
 
     return true;
   };
 
-  const subirFotoPerfil = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
+  const subirFotoPerfil = async (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0];
 
     event.target.value = "";
@@ -540,167 +504,155 @@ export default function ParticipanteDetallePage() {
       return;
     }
 
-    const formatosPermitidos = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
+    const formatosPermitidos = ["image/jpeg", "image/png", "image/webp"];
 
-    if (
-      !formatosPermitidos.includes(archivo.type)
-    ) {
-      setError(
+    if (!formatosPermitidos.includes(archivo.type)) {
+      mostrarSnackbar(
         "La foto debe estar en formato JPG, PNG o WEBP.",
+        "error",
       );
-
       return;
     }
 
     if (archivo.size > MAX_FOTO_SIZE) {
-      setError(
-        "La foto no puede superar los 5 MB.",
-      );
-
+      mostrarSnackbar("La foto no puede superar los 5 MB.", "error");
       return;
     }
 
     setUploadingPhoto(true);
-    setError("");
-    setSuccess("");
+    setErrorModal(ERROR_MODAL_INICIAL);
 
-    const extension =
-      obtenerExtensionFoto(archivo);
-
+    const extension = obtenerExtensionFoto(archivo);
     const nuevaRuta =
-      `participantes/${id}/perfil-` +
-      `${Date.now()}.${extension}`;
-
-    const rutaAnterior =
-      participante.foto_perfil_path;
+      `participantes/${id}/perfil-` + `${Date.now()}.${extension}`;
+    const rutaAnterior = participante.foto_perfil_path;
 
     try {
-      const { error: uploadError } =
-        await supabase.storage
-          .from(FOTO_BUCKET)
-          .upload(nuevaRuta, archivo, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: archivo.type,
-          });
+      const { error: uploadError } = await supabase.storage
+        .from(FOTO_BUCKET)
+        .upload(nuevaRuta, archivo, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: archivo.type,
+        });
 
       if (uploadError) {
         throw uploadError;
       }
 
-      const {
-        data: participanteActualizado,
-        error: updateError,
-      } = await supabase
-        .from("participantes")
-        .update({
-          foto_perfil_path: nuevaRuta,
-        })
-        .eq("id", id)
-        .select("*")
-        .single();
+      const { data: participanteActualizado, error: updateError } =
+        await supabase
+          .from("participantes")
+          .update({
+            foto_perfil_path: nuevaRuta,
+          })
+          .eq("id", id)
+          .select("*")
+          .single();
 
       if (updateError) {
-        await supabase.storage
-          .from(FOTO_BUCKET)
-          .remove([nuevaRuta]);
-
+        await supabase.storage.from(FOTO_BUCKET).remove([nuevaRuta]);
         throw updateError;
       }
 
-      setParticipante(
-        participanteActualizado as Participante,
-      );
-
+      setParticipante(participanteActualizado as Participante);
       setImageError(false);
       setPhotoVersion(Date.now());
 
-      if (
-        rutaAnterior &&
-        rutaAnterior !== nuevaRuta
-      ) {
-        const { error: removeError } =
-          await supabase.storage
-            .from(FOTO_BUCKET)
-            .remove([rutaAnterior]);
+      if (rutaAnterior && rutaAnterior !== nuevaRuta) {
+        const { error: removeError } = await supabase.storage
+          .from(FOTO_BUCKET)
+          .remove([rutaAnterior]);
 
         if (removeError) {
-          console.error(
-            "No se pudo borrar la foto anterior:",
-            removeError,
-          );
+          console.error("No se pudo borrar la foto anterior:", removeError);
         }
       }
 
-      mostrarExito(
-        "La foto de perfil se actualizó correctamente.",
-      );
+      mostrarSnackbar("La foto de perfil se actualizó correctamente.");
     } catch (uploadError) {
       const message =
         uploadError instanceof Error
           ? uploadError.message
           : "No se pudo actualizar la foto.";
 
-      setError(message);
+      mostrarError(message, "No se pudo actualizar la foto");
     } finally {
       setUploadingPhoto(false);
     }
   };
 
-  const darBaja = async () => {
+  const solicitarCambioEstado = () => {
+    if (!participante) {
+      return;
+    }
+
+    const estaActiva = participante.estado === "activa";
+
+    setConfirmationModal({
+      open: true,
+      title: estaActiva
+        ? "Dar de baja a la participante"
+        : "Reactivar participante",
+      message: estaActiva
+        ? `¿Confirmás que querés dar de baja a ${participante.nombre} ${participante.apellido}?`
+        : `¿Confirmás que querés reactivar a ${participante.nombre} ${participante.apellido}?`,
+      confirmText: estaActiva ? "Sí, dar de baja" : "Sí, reactivar",
+      variant: estaActiva ? "danger" : "primary",
+    });
+  };
+
+  const cambiarEstadoParticipante = async () => {
     if (!id || !participante) {
       return;
     }
 
-    const nuevoEstado =
-      participante.estado === "activa"
-        ? "baja"
-        : "activa";
+    const nuevoEstado = participante.estado === "activa" ? "baja" : "activa";
 
     const fechaEgreso =
-      nuevoEstado === "baja"
-        ? new Date()
-            .toISOString()
-            .slice(0, 10)
-        : null;
+      nuevoEstado === "baja" ? new Date().toISOString().slice(0, 10) : null;
 
     setChangingStatus(true);
-    setError("");
-    setSuccess("");
+    setErrorModal(ERROR_MODAL_INICIAL);
 
-    const {
-      data,
-      error: updateError,
-    } = await supabase
-      .from("participantes")
-      .update({
-        estado: nuevoEstado,
-        fecha_egreso: fechaEgreso,
-      })
-      .eq("id", id)
-      .select("*")
-      .single();
+    try {
+      const { data, error: updateError } = await supabase
+        .from("participantes")
+        .update({
+          estado: nuevoEstado,
+          fecha_egreso: fechaEgreso,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
 
-    if (updateError) {
-      setError(updateError.message);
+      if (updateError) {
+        mostrarError(
+          updateError.message ||
+            "No se pudo cambiar el estado de la participante.",
+        );
+
+        return;
+      }
+
+      setParticipante(data as Participante);
+
+      setConfirmationModal(CONFIRMATION_MODAL_INICIAL);
+
+      mostrarSnackbar(
+        nuevoEstado === "baja"
+          ? "La participante fue dada de baja."
+          : "La participante fue reactivada.",
+      );
+    } catch (statusError) {
+      mostrarError(
+        statusError instanceof Error
+          ? statusError.message
+          : "No se pudo cambiar el estado de la participante.",
+      );
+    } finally {
       setChangingStatus(false);
-
-      return;
     }
-
-    setParticipante(data as Participante);
-
-    mostrarExito(
-      nuevoEstado === "baja"
-        ? "La participante fue dada de baja."
-        : "La participante fue reactivada.",
-    );
-
-    setChangingStatus(false);
   };
 
   if (loading) {
@@ -708,7 +660,8 @@ export default function ParticipanteDetallePage() {
       <div
         className="
           rounded-3xl border border-slate-200
-          bg-white p-12 text-center
+          bg-white p-8 text-center
+          sm:p-12
           text-slate-500 shadow-sm
         "
       >
@@ -719,32 +672,41 @@ export default function ParticipanteDetallePage() {
 
   if (!participante) {
     return (
-      <div
-        className="
-          rounded-2xl border border-red-200
-          bg-red-50 p-4 text-red-700
-        "
-      >
-        {error ||
-          "No se encontró la participante."}
-      </div>
+      <>
+        <div
+          className="
+            rounded-3xl border border-slate-200
+            bg-white p-8 text-center
+            text-slate-600 shadow-sm
+          "
+        >
+          No se pudo mostrar la ficha de la participante.
+        </div>
+
+        <ErrorModal
+          open={errorModal.open}
+          title={errorModal.title}
+          message={errorModal.message}
+          onClose={() => {
+            cerrarErrorModal();
+            navigate("/participantes");
+          }}
+        />
+      </>
     );
   }
 
-  const fotoPublica = obtenerUrlFoto(
-    participante.foto_perfil_path,
-  );
+  const fotoPublica = obtenerUrlFoto(participante.foto_perfil_path);
 
   const fotoUrl =
     fotoPublica && photoVersion
       ? `${fotoPublica}?v=${photoVersion}`
       : fotoPublica;
 
-  const mostrarFoto =
-    Boolean(fotoUrl) && !imageError;
+  const mostrarFoto = Boolean(fotoUrl) && !imageError;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5 sm:gap-6">
       <div
         className="
           flex flex-col gap-3
@@ -754,12 +716,11 @@ export default function ParticipanteDetallePage() {
       >
         <button
           type="button"
-          onClick={() =>
-            navigate("/participantes")
-          }
+          onClick={() => navigate("/participantes")}
           className="
-            flex items-center justify-center
+            flex w-full items-center justify-center
             gap-2 rounded-2xl border
+            sm:w-auto
             border-slate-300 bg-white
             px-4 py-3 font-semibold
             text-slate-700 shadow-sm
@@ -775,11 +736,12 @@ export default function ParticipanteDetallePage() {
 
         <button
           type="button"
-          onClick={() => void darBaja()}
+          onClick={solicitarCambioEstado}
           disabled={changingStatus}
           className={`
-            flex items-center justify-center
+            flex w-full items-center justify-center
             gap-2 rounded-2xl
+            sm:w-auto
             px-4 py-3 font-semibold
             transition-colors
             focus:outline-none focus:ring-4
@@ -810,32 +772,7 @@ export default function ParticipanteDetallePage() {
         </button>
       </div>
 
-      {error && (
-        <div
-          className="
-            rounded-2xl border border-red-200
-            bg-red-50 px-4 py-3
-            text-sm font-medium text-red-700
-          "
-        >
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div
-          className="
-            rounded-2xl border
-            border-green-200 bg-green-50
-            px-4 py-3 text-sm
-            font-medium text-green-700
-          "
-        >
-          {success}
-        </div>
-      )}
-
-      <Card>
+      <Card className="p-4 sm:p-6">
         <div
           className="
             flex flex-col gap-6
@@ -845,8 +782,8 @@ export default function ParticipanteDetallePage() {
         >
           <div
             className="
-              flex flex-col items-center gap-5
-              sm:flex-row sm:items-center
+              flex flex-col items-center gap-4
+              sm:flex-row sm:items-center sm:gap-5
             "
           >
             <div className="relative shrink-0">
@@ -854,9 +791,7 @@ export default function ParticipanteDetallePage() {
                 ref={fotoInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) =>
-                  void subirFotoPerfil(event)
-                }
+                onChange={(event) => void subirFotoPerfil(event)}
                 className="hidden"
               />
 
@@ -873,12 +808,11 @@ export default function ParticipanteDetallePage() {
                     : "Agregar foto de perfil"
                 }
                 disabled={uploadingPhoto}
-                onClick={() =>
-                  fotoInputRef.current?.click()
-                }
+                onClick={() => fotoInputRef.current?.click()}
                 className="
                   group relative block
-                  h-30 w-30 cursor-pointer
+                  h-28 w-28 cursor-pointer
+                  sm:h-30 sm:w-30
                   rounded-full
                   focus:outline-none
                   focus:ring-4
@@ -890,7 +824,8 @@ export default function ParticipanteDetallePage() {
                 <div
                   className="
                     absolute left-0 top-0
-                    h-28 w-28
+                    h-26 w-26
+                    sm:h-28 sm:w-28
                     overflow-hidden rounded-full
                     border-4 border-white
                     bg-pink-100
@@ -904,7 +839,7 @@ export default function ParticipanteDetallePage() {
                   <img
                     src={
                       mostrarFoto
-                        ? fotoUrl ?? undefined
+                        ? (fotoUrl ?? undefined)
                         : "/placeholder_person.png"
                     }
                     alt={
@@ -989,9 +924,8 @@ export default function ParticipanteDetallePage() {
                   sm:justify-start
                 "
               >
-                <h1 className="text-3xl font-bold text-slate-900">
-                  {participante.nombre}{" "}
-                  {participante.apellido}
+                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                  {participante.nombre} {participante.apellido}
                 </h1>
 
                 <span
@@ -999,8 +933,7 @@ export default function ParticipanteDetallePage() {
                     rounded-full px-3 py-1
                     text-xs font-semibold
                     ${
-                      participante.estado ===
-                      "activa"
+                      participante.estado === "activa"
                         ? `
                           bg-green-100
                           text-green-700
@@ -1012,19 +945,13 @@ export default function ParticipanteDetallePage() {
                     }
                   `}
                 >
-                  {participante.estado ===
-                  "activa"
-                    ? "Activa"
-                    : "Baja"}
+                  {participante.estado === "activa" ? "Activa" : "Baja"}
                 </span>
               </div>
 
-              <p className="mt-2 text-slate-500">
-                CI:{" "}
-                {FormatHelper.mostrarCedula(
-                  participante.ci,
-                )}{" "}
-                · {participante.tipo_participante}
+              <p className="mt-2 text-sm text-slate-500 sm:text-base">
+                CI: {FormatHelper.mostrarCedula(participante.ci)} ·{" "}
+                {participante.tipo_participante}
               </p>
 
               <p className="mt-2 text-xs text-slate-400">
@@ -1035,22 +962,16 @@ export default function ParticipanteDetallePage() {
 
           <div
             className="
-              grid grid-cols-1 gap-3
-              sm:grid-cols-3
+              grid w-full grid-cols-1 gap-3
+              sm:grid-cols-3 xl:w-auto
             "
           >
             <Mini
               label="Último pago"
               value={
-                pagos[0]
-                  ? formatearFecha(
-                      pagos[0].fecha_pago,
-                    )
-                  : "Sin registrar"
+                pagos[0] ? formatearFecha(pagos[0].fecha_pago) : "Sin registrar"
               }
-              icon={
-                <Wallet className="h-5 w-5" />
-              }
+              icon={<Wallet className="h-5 w-5" />}
               iconTitle="Último pago registrado"
             />
 
@@ -1058,36 +979,30 @@ export default function ParticipanteDetallePage() {
               label="Última asistencia"
               value={
                 asistencias[0]
-                  ? formatearFechaHora(
-                      asistencias[0].fecha,
-                    )
+                  ? formatearFechaHora(asistencias[0].fecha)
                   : "Sin registrar"
               }
-              icon={
-                <CalendarCheck className="h-5 w-5" />
-              }
+              icon={<CalendarCheck className="h-5 w-5" />}
               iconTitle="Última asistencia registrada"
             />
 
             <Mini
               label="Ingreso"
-              value={formatearFecha(
-                participante.fecha_ingreso,
-              )}
-              icon={
-                <CalendarDays className="h-5 w-5" />
-              }
+              value={formatearFecha(participante.fecha_ingreso)}
+              icon={<CalendarDays className="h-5 w-5" />}
               iconTitle="Fecha de ingreso"
             />
           </div>
         </div>
       </Card>
 
-      <Card className="p-2">
+      <Card className="overflow-hidden p-2">
         <div
           className="
-            grid grid-cols-2 gap-2
-            lg:grid-cols-4
+            flex gap-2 overflow-x-auto
+            overscroll-x-contain pb-1
+            lg:grid lg:grid-cols-4
+            lg:overflow-visible lg:pb-0
           "
         >
           {(
@@ -1116,33 +1031,24 @@ export default function ParticipanteDetallePage() {
                 <FileText className="h-4 w-4" />,
                 "Ver archivos adjuntos",
               ],
-            ] as [
-              Tab,
-              string,
-              ReactNode,
-              string,
-            ][]
-          ).map(
-            ([
-              key,
-              label,
-              icon,
-              iconTitle,
-            ]) => (
-              <button
-                type="button"
-                key={key}
-                title={iconTitle}
-                aria-label={iconTitle}
-                onClick={() =>
-                  setSearchParams({
-                    tab: key,
-                  })
-                }
-                className={`
-                  flex items-center
+            ] as [Tab, string, ReactNode, string][]
+          ).map(([key, label, icon, iconTitle]) => (
+            <button
+              type="button"
+              key={key}
+              title={iconTitle}
+              aria-label={iconTitle}
+              onClick={() =>
+                setSearchParams({
+                  tab: key,
+                })
+              }
+              className={`
+                  flex shrink-0 items-center
                   justify-center gap-2
                   rounded-2xl px-4 py-3
+                  text-sm sm:text-base
+                  lg:w-full
                   font-semibold
                   transition-colors
                   focus:outline-none
@@ -1161,12 +1067,11 @@ export default function ParticipanteDetallePage() {
                       `
                   }
                 `}
-              >
-                {icon}
-                {label}
-              </button>
-            ),
-          )}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -1181,9 +1086,7 @@ export default function ParticipanteDetallePage() {
             cardId="datos-personales"
             title="Datos personales"
             description="Identificación y datos de contacto."
-            icon={
-              <User className="h-5 w-5" />
-            }
+            icon={<User className="h-5 w-5" />}
             iconTitle="Datos personales"
             participante={participante}
             fields={[
@@ -1211,8 +1114,7 @@ export default function ParticipanteDetallePage() {
               {
                 key: "telefono_alternativo",
                 label: "Teléfono alternativo",
-                placeholder:
-                  "Teléfono alternativo",
+                placeholder: "Teléfono alternativo",
               },
               {
                 key: "email",
@@ -1231,45 +1133,27 @@ export default function ParticipanteDetallePage() {
                 placeholder: "Ocupación",
               },
             ]}
-            saving={
-              savingCard === "datos-personales"
-            }
+            saving={savingCard === "datos-personales"}
             onSave={async (values) =>
-              guardarParticipante(
-                "datos-personales",
-                {
-                  nombre:
-                    values.nombre.trim(),
+              guardarParticipante("datos-personales", {
+                nombre: values.nombre.trim(),
 
-                  apellido:
-                    values.apellido.trim(),
+                apellido: values.apellido.trim(),
 
-                  ci: FormatHelper.limpiarCedula(
-                    values.ci,
-                  ),
+                ci: FormatHelper.limpiarCedula(values.ci),
 
-                  telefono: cleanTextValue(
-                    values.telefono,
-                  ),
+                telefono: cleanTextValue(values.telefono),
 
-                  telefono_alternativo:
-                    cleanTextValue(
-                      values.telefono_alternativo,
-                    ),
+                telefono_alternativo: cleanTextValue(
+                  values.telefono_alternativo,
+                ),
 
-                  email: cleanTextValue(
-                    values.email,
-                  ),
+                email: cleanTextValue(values.email),
 
-                  direccion: cleanTextValue(
-                    values.direccion,
-                  ),
+                direccion: cleanTextValue(values.direccion),
 
-                  ocupacion: cleanTextValue(
-                    values.ocupacion,
-                  ),
-                },
-              )
+                ocupacion: cleanTextValue(values.ocupacion),
+              })
             }
           />
 
@@ -1277,9 +1161,7 @@ export default function ParticipanteDetallePage() {
             cardId="datos-administrativos"
             title="Datos administrativos"
             description="Tipo de ficha, estado e ingreso."
-            icon={
-              <ClipboardList className="h-5 w-5" />
-            }
+            icon={<ClipboardList className="h-5 w-5" />}
             iconTitle="Datos administrativos"
             participante={participante}
             fields={[
@@ -1319,23 +1201,15 @@ export default function ParticipanteDetallePage() {
                 type: "date",
               },
             ]}
-            saving={
-              savingCard ===
-              "datos-administrativos"
-            }
+            saving={savingCard === "datos-administrativos"}
             onSave={async (values) =>
-              guardarParticipante(
-                "datos-administrativos",
-                {
-                  tipo_participante:
-                    values.tipo_participante,
+              guardarParticipante("datos-administrativos", {
+                tipo_participante: values.tipo_participante,
 
-                  estado: values.estado,
+                estado: values.estado,
 
-                  fecha_ingreso:
-                    values.fecha_ingreso,
-                },
-              )
+                fecha_ingreso: values.fecha_ingreso,
+              })
             }
           />
 
@@ -1343,23 +1217,19 @@ export default function ParticipanteDetallePage() {
             cardId="informacion-salud"
             title="Información de salud"
             description="Prestador, emergencia y cirugía."
-            icon={
-              <HeartPulse className="h-5 w-5" />
-            }
+            icon={<HeartPulse className="h-5 w-5" />}
             iconTitle="Información de salud"
             participante={participante}
             fields={[
               {
                 key: "prestador_salud",
                 label: "Prestador",
-                placeholder:
-                  "Prestador de salud",
+                placeholder: "Prestador de salud",
               },
               {
                 key: "emergencia_movil",
                 label: "Emergencia móvil",
-                placeholder:
-                  "Emergencia móvil",
+                placeholder: "Emergencia móvil",
               },
               {
                 key: "fecha_cirugia",
@@ -1369,40 +1239,21 @@ export default function ParticipanteDetallePage() {
               {
                 key: "tipo_cirugia",
                 label: "Tipo cirugía",
-                placeholder:
-                  "Tipo de cirugía",
+                placeholder: "Tipo de cirugía",
               },
             ]}
-            saving={
-              savingCard ===
-              "informacion-salud"
-            }
+            saving={savingCard === "informacion-salud"}
             onSave={async (values) =>
-              guardarParticipante(
-                "informacion-salud",
-                {
-                  prestador_salud:
-                    cleanTextValue(
-                      values.prestador_salud,
-                    ),
+              guardarParticipante("informacion-salud", {
+                prestador_salud: cleanTextValue(values.prestador_salud),
 
-                  emergencia_movil:
-                    cleanTextValue(
-                      values.emergencia_movil,
-                    ),
+                emergencia_movil: cleanTextValue(values.emergencia_movil),
 
-                  fecha_cirugia:
-                    values.fecha_cirugia ===
-                    ""
-                      ? null
-                      : values.fecha_cirugia,
+                fecha_cirugia:
+                  values.fecha_cirugia === "" ? null : values.fecha_cirugia,
 
-                  tipo_cirugia:
-                    cleanTextValue(
-                      values.tipo_cirugia,
-                    ),
-                },
-              )
+                tipo_cirugia: cleanTextValue(values.tipo_cirugia),
+              })
             }
           />
 
@@ -1410,9 +1261,7 @@ export default function ParticipanteDetallePage() {
             cardId="antecedentes-valoracion"
             title="Antecedentes y valoración"
             description="Condiciones médicas y linfedema."
-            icon={
-              <Activity className="h-5 w-5" />
-            }
+            icon={<Activity className="h-5 w-5" />}
             iconTitle="Antecedentes y valoración"
             participante={participante}
             fields={[
@@ -1420,15 +1269,13 @@ export default function ParticipanteDetallePage() {
                 key: "hta",
                 label: "HTA",
                 type: "select",
-                options:
-                  opcionesBooleanas,
+                options: opcionesBooleanas,
               },
               {
                 key: "diabetes",
                 label: "Diabetes",
                 type: "select",
-                options:
-                  opcionesBooleanas,
+                options: opcionesBooleanas,
               },
               {
                 key: "alergias",
@@ -1438,20 +1285,15 @@ export default function ParticipanteDetallePage() {
               },
               {
                 key: "otros_antecedentes",
-                label:
-                  "Otros antecedentes",
+                label: "Otros antecedentes",
                 type: "textarea",
-                placeholder:
-                  "Otros antecedentes",
+                placeholder: "Otros antecedentes",
               },
               {
-                key:
-                  "desarrolla_linfedema",
-                label:
-                  "Desarrolla linfedema",
+                key: "desarrolla_linfedema",
+                label: "Desarrolla linfedema",
                 type: "select",
-                options:
-                  opcionesBooleanas,
+                options: opcionesBooleanas,
               },
               {
                 key: "miembro_afectado",
@@ -1480,58 +1322,30 @@ export default function ParticipanteDetallePage() {
                 key: "observaciones",
                 label: "Observaciones",
                 type: "textarea",
-                placeholder:
-                  "Observaciones",
+                placeholder: "Observaciones",
               },
             ]}
-            saving={
-              savingCard ===
-              "antecedentes-valoracion"
-            }
+            saving={savingCard === "antecedentes-valoracion"}
             onSave={async (values) =>
-              guardarParticipante(
-                "antecedentes-valoracion",
-                {
-                  hta:
-                    values.hta === ""
-                      ? null
-                      : values.hta ===
-                        "true",
+              guardarParticipante("antecedentes-valoracion", {
+                hta: values.hta === "" ? null : values.hta === "true",
 
-                  diabetes:
-                    values.diabetes === ""
-                      ? null
-                      : values.diabetes ===
-                        "true",
+                diabetes:
+                  values.diabetes === "" ? null : values.diabetes === "true",
 
-                  alergias:
-                    cleanTextValue(
-                      values.alergias,
-                    ),
+                alergias: cleanTextValue(values.alergias),
 
-                  otros_antecedentes:
-                    cleanTextValue(
-                      values.otros_antecedentes,
-                    ),
+                otros_antecedentes: cleanTextValue(values.otros_antecedentes),
 
-                  desarrolla_linfedema:
-                    values.desarrolla_linfedema ===
-                    ""
-                      ? null
-                      : values.desarrolla_linfedema ===
-                        "true",
+                desarrolla_linfedema:
+                  values.desarrolla_linfedema === ""
+                    ? null
+                    : values.desarrolla_linfedema === "true",
 
-                  miembro_afectado:
-                    cleanTextValue(
-                      values.miembro_afectado,
-                    ),
+                miembro_afectado: cleanTextValue(values.miembro_afectado),
 
-                  observaciones:
-                    cleanTextValue(
-                      values.observaciones,
-                    ),
-                },
-              )
+                observaciones: cleanTextValue(values.observaciones),
+              })
             }
           />
         </div>
@@ -1539,29 +1353,17 @@ export default function ParticipanteDetallePage() {
 
       {tab === "pagos" && (
         <Table
-          headers={[
-            "Mes",
-            "Fecha de pago",
-            "Monto",
-            "Observaciones",
-          ]}
+          headers={["Mes", "Fecha de pago", "Monto", "Observaciones"]}
           rows={pagos.map((pago) => [
-            `${
-              meses[pago.mes_abonado - 1]
-            } ${pago.anio_abonado}`,
+            `${meses[pago.mes_abonado - 1]} ${pago.anio_abonado}`,
 
-            formatearFecha(
-              pago.fecha_pago,
-            ),
+            formatearFecha(pago.fecha_pago),
 
             pago.monto == null
               ? "Sin registrar"
-              : `$${Number(
-                  pago.monto,
-                ).toLocaleString("es-US")}`,
+              : `$${Number(pago.monto).toLocaleString("es-US")}`,
 
-            pago.observaciones ||
-              "Sin observaciones",
+            pago.observaciones || "Sin observaciones",
           ])}
         />
       )}
@@ -1574,25 +1376,18 @@ export default function ParticipanteDetallePage() {
             "Horario de clase",
             "Observaciones",
           ]}
-          rows={asistencias.map(
-            (asistencia) => [
-              formatearFecha(
-                asistencia.fecha,
-              ),
+          rows={asistencias.map((asistencia) => [
+            formatearFecha(asistencia.fecha),
 
-              formatearHora(
-                asistencia.fecha,
-              ),
+            formatearHora(asistencia.fecha),
 
-              formatearHorario(
-                asistencia.hora_inicio_snapshot,
-                asistencia.hora_fin_snapshot,
-              ),
+            formatearHorario(
+              asistencia.hora_inicio_snapshot,
+              asistencia.hora_fin_snapshot,
+            ),
 
-              asistencia.observaciones ||
-                "Sin observaciones",
-            ],
-          )}
+            asistencia.observaciones || "Sin observaciones",
+          ])}
         />
       )}
 
@@ -1603,6 +1398,31 @@ export default function ParticipanteDetallePage() {
           onChange={setArchivos}
         />
       )}
+
+      <ConfirmationModal
+        open={confirmationModal.open}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        confirmText={confirmationModal.confirmText}
+        variant={confirmationModal.variant}
+        loading={changingStatus}
+        onCancel={cerrarConfirmationModal}
+        onConfirm={() => void cambiarEstadoParticipante()}
+      />
+
+      <ErrorModal
+        open={errorModal.open}
+        title={errorModal.title}
+        message={errorModal.message}
+        onClose={cerrarErrorModal}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        type={snackbar.type}
+        message={snackbar.message}
+        onClose={cerrarSnackbar}
+      />
     </div>
   );
 }
@@ -1621,8 +1441,9 @@ function Mini({
   return (
     <div
       className="
-        flex min-w-[180px]
+        flex min-w-0
         items-center gap-3
+        sm:min-w-[180px]
         rounded-2xl border
         border-slate-200
         bg-[#F5F9FF] px-4 py-3
@@ -1652,9 +1473,7 @@ function Mini({
           {label}
         </p>
 
-        <p className="mt-1 font-bold text-slate-900">
-          {value}
-        </p>
+        <p className="mt-1 font-bold text-slate-900">{value}</p>
       </div>
     </div>
   );
@@ -1679,54 +1498,30 @@ function EditableInfoCard({
   participante: Participante;
   fields: EditableField[];
   saving: boolean;
-  onSave: (
-    values: EditableValues,
-  ) => Promise<boolean>;
+  onSave: (values: EditableValues) => Promise<boolean>;
 }) {
-  const initialValues =
-    participanteToEditableValues(
-      participante,
-      fields,
-    );
+  const initialValues = participanteToEditableValues(participante, fields);
 
-  const [values, setValues] =
-    useState<EditableValues>(
-      initialValues,
-    );
+  const [values, setValues] = useState<EditableValues>(initialValues);
 
-  const [savedValues, setSavedValues] =
-    useState<EditableValues>(
-      initialValues,
-    );
+  const [savedValues, setSavedValues] = useState<EditableValues>(initialValues);
 
   useEffect(() => {
-    const nextValues =
-      participanteToEditableValues(
-        participante,
-        fields,
-      );
+    const nextValues = participanteToEditableValues(participante, fields);
 
     setValues(nextValues);
     setSavedValues(nextValues);
   }, [participante, cardId]);
 
-  const hasChanges = !areValuesEqual(
-    savedValues,
-    values,
-  );
+  const hasChanges = !areValuesEqual(savedValues, values);
 
   const cedulaInvalida = fields.some(
     (field) =>
       field.type === "cedula" &&
-      !FormatHelper.cedulaCompleta(
-        values[field.key] ?? "",
-      ),
+      !FormatHelper.cedulaCompleta(values[field.key] ?? ""),
   );
 
-  const handleChange = (
-    key: keyof Participante,
-    value: string,
-  ) => {
+  const handleChange = (key: keyof Participante, value: string) => {
     setValues((current) => ({
       ...current,
       [key]: value,
@@ -1734,7 +1529,7 @@ function EditableInfoCard({
   };
 
   const handleSave = async () => {
-    if (cedulaInvalida) {
+    if (cedulaInvalida || saving) {
       return;
     }
 
@@ -1747,10 +1542,9 @@ function EditableInfoCard({
 
       fields.forEach((field) => {
         if (field.type === "cedula") {
-          nextSavedValues[field.key] =
-            FormatHelper.formatearCedula(
-              values[field.key] ?? "",
-            );
+          nextSavedValues[field.key] = FormatHelper.formatearCedula(
+            values[field.key] ?? "",
+          );
         }
       });
 
@@ -1763,86 +1557,73 @@ function EditableInfoCard({
     <Card className="overflow-hidden p-0">
       <div
         className="
-          flex items-center gap-3
-          border-b border-slate-200
-          bg-[#FFF5FE] px-5 py-4
-        "
+            flex items-center gap-3
+            border-b border-slate-200
+            bg-[#FFF5FE] px-5 py-4
+          "
       >
         <div
           title={iconTitle}
           aria-label={iconTitle}
           className="
-            flex h-10 w-10 shrink-0
-            items-center justify-center
-            rounded-xl bg-white
-            text-pink-600 shadow-sm
-          "
+              flex h-10 w-10 shrink-0
+              items-center justify-center
+              rounded-xl bg-white
+              text-pink-600 shadow-sm
+            "
         >
           {icon}
         </div>
 
         <div>
-          <h2 className="font-bold text-slate-900">
-            {title}
-          </h2>
+          <h2 className="font-bold text-slate-900">{title}</h2>
 
-          <p className="mt-0.5 text-sm text-slate-500">
-            {description}
-          </p>
+          <p className="mt-0.5 text-sm text-slate-500">{description}</p>
         </div>
       </div>
 
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="grid gap-4">
           {fields.map((field) => (
             <EditableInput
               key={field.key}
               field={field}
-              value={
-                values[field.key] ?? ""
-              }
-              onChange={(value) =>
-                handleChange(
-                  field.key,
-                  value,
-                )
-              }
+              value={values[field.key] ?? ""}
+              onChange={(value) => handleChange(field.key, value)}
             />
           ))}
         </div>
 
         {hasChanges && (
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex justify-stretch sm:justify-end">
             <button
               type="button"
-              disabled={
-                saving ||
-                cedulaInvalida
-              }
-              onClick={() =>
-                void handleSave()
-              }
+              disabled={saving || cedulaInvalida}
+              onClick={() => void handleSave()}
               className="
-                flex items-center gap-2
-                rounded-2xl bg-pink-600
-                px-5 py-3 font-semibold
-                text-white shadow-sm
-                transition-colors
-                hover:bg-pink-700
-                focus:outline-none
-                focus:ring-4
-                focus:ring-pink-200
-                disabled:cursor-not-allowed
-                disabled:bg-slate-300
-                disabled:text-slate-500
-                disabled:shadow-none
-              "
+                  flex w-full items-center justify-center gap-2
+                  rounded-2xl bg-pink-600
+                  sm:w-auto
+                  px-5 py-3 font-semibold
+                  text-white shadow-sm
+                  transition-colors
+                  hover:bg-pink-700
+                  focus:outline-none
+                  focus:ring-4
+                  focus:ring-pink-200
+                  disabled:cursor-not-allowed
+                  disabled:bg-slate-300
+                  disabled:text-slate-500
+                  disabled:shadow-none
+                "
             >
-              <Save className="h-4 w-4" />
+              {saving ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
 
-              {saving
-                ? "Guardando..."
-                : "Guardar"}
+              {saving ? "Guardando..." : "Guardar"}
             </button>
           </div>
         )}
@@ -1861,9 +1642,7 @@ function EditableInput({
   onChange: (value: string) => void;
 }) {
   const cedulaConContenido =
-    field.type === "cedula" &&
-    FormatHelper.limpiarCedula(value).length >
-      0;
+    field.type === "cedula" && FormatHelper.limpiarCedula(value).length > 0;
 
   const cedulaInvalida =
     field.type === "cedula" &&
@@ -1896,29 +1675,20 @@ function EditableInput({
           value={value}
           rows={3}
           placeholder={field.placeholder}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
           className={`${baseClassName} resize-y`}
         />
       ) : field.type === "select" ? (
         <select
           value={value}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
           className={baseClassName}
         >
-          {field.options?.map(
-            (option) => (
-              <option
-                key={option.value}
-                value={option.value}
-              >
-                {option.label}
-              </option>
-            ),
-          )}
+          {field.options?.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       ) : field.type === "cedula" ? (
         <>
@@ -1928,17 +1698,10 @@ function EditableInput({
             inputMode="numeric"
             autoComplete="off"
             maxLength={11}
-            placeholder={
-              field.placeholder ??
-              "1.234.567-8"
-            }
+            placeholder={field.placeholder ?? "1.234.567-8"}
             aria-invalid={cedulaInvalida}
             onChange={(event) => {
-              onChange(
-                FormatHelper.formatearCedula(
-                  event.target.value,
-                ),
-              );
+              onChange(FormatHelper.formatearCedula(event.target.value));
             }}
             className={`
               ${baseClassName}
@@ -1970,9 +1733,7 @@ function EditableInput({
           type={field.type ?? "text"}
           value={value}
           placeholder={field.placeholder}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
           className={baseClassName}
         />
       )}
@@ -1980,91 +1741,471 @@ function EditableInput({
   );
 }
 
-function Table({
-  headers,
-  rows,
-}: {
-  headers: string[];
-  rows: string[][];
-}) {
+function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
-    <Card className="overflow-hidden p-0">
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr
-              className="
-                border-b border-slate-200
-                bg-[#F5F9FF] text-left
-              "
-            >
-              {headers.map((header) => (
-                <th
-                  key={header}
-                  className="
-                    whitespace-nowrap
-                    px-6 py-4 text-sm
-                    font-semibold
-                    text-slate-700
-                  "
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
+    <>
+      <div className="flex flex-col gap-3 md:hidden">
+        {rows.length === 0 ? (
+          <Card className="p-4 text-center text-sm text-slate-500">
+            No hay registros.
+          </Card>
+        ) : (
+          rows.map((row, rowIndex) => (
+            <Card key={rowIndex} className="p-4">
+              <div className="flex flex-col gap-3">
+                {row.map((cell, cellIndex) => (
+                  <div
+                    key={cellIndex}
+                    className="
+                      flex items-start justify-between gap-4
+                      border-b border-slate-100 pb-3
+                      last:border-b-0 last:pb-0
+                    "
+                  >
+                    <span
+                      className="
+                        shrink-0 text-xs font-semibold
+                        uppercase tracking-wide
+                        text-slate-400
+                      "
+                    >
+                      {headers[cellIndex]}
+                    </span>
 
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={headers.length}
-                  className="
-                    px-6 py-12
-                    text-center text-sm
-                    text-slate-500
-                  "
-                >
-                  No hay registros.
-                </td>
+                    <span className="min-w-0 text-right text-sm font-medium text-slate-700">
+                      {cell}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
+
+      <Card className="hidden overflow-hidden p-0 md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr
+                className="
+                  border-b border-slate-200
+                  bg-[#F5F9FF] text-left
+                "
+              >
+                {headers.map((header) => (
+                  <th
+                    key={header}
+                    className="
+                      whitespace-nowrap
+                      px-6 py-4 text-sm
+                      font-semibold
+                      text-slate-700
+                    "
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              rows.map(
-                (row, rowIndex) => (
+            </thead>
+
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={headers.length}
+                    className="
+                      px-6 py-12
+                      text-center text-sm
+                      text-slate-500
+                    "
+                  >
+                    No hay registros.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
                     className="
-                      border-b
-                      border-slate-100
+                      border-b border-slate-100
                       transition-colors
                       last:border-b-0
                       hover:bg-[#FFF5F9]
                     "
                   >
-                    {row.map(
-                      (
-                        cell,
-                        cellIndex,
-                      ) => (
-                        <td
-                          key={cellIndex}
-                          className="
-                            whitespace-nowrap
-                            px-6 py-5
-                            text-slate-600
-                          "
-                        >
-                          {cell}
-                        </td>
-                      ),
-                    )}
+                    {row.map((cell, cellIndex) => (
+                      <td
+                        key={cellIndex}
+                        className="
+                          whitespace-nowrap
+                          px-6 py-5
+                          text-slate-600
+                        "
+                      >
+                        {cell}
+                      </td>
+                    ))}
                   </tr>
-                ),
-              )
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function ConfirmationModal({
+  open,
+  title,
+  message,
+  confirmText,
+  variant,
+  loading = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  variant: "primary" | "danger";
+  loading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  const esPeligroso = variant === "danger";
+
+  return (
+    <div
+      className="
+        fixed inset-0 z-[150]
+        flex items-end justify-center
+        bg-slate-950/45 p-3
+        sm:items-center sm:p-4
+        backdrop-blur-[2px]
+      "
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmation-modal-title"
+        aria-describedby="confirmation-modal-message"
+        className="
+          max-h-[90dvh] w-full overflow-y-auto
+          sm:max-w-md
+          rounded-3xl border border-slate-200
+          bg-white shadow-2xl
+        "
+      >
+        <div className="p-5 sm:p-6">
+          <div
+            className={`
+              flex h-14 w-14 items-center
+              justify-center rounded-2xl
+              ${
+                esPeligroso
+                  ? "bg-red-100 text-red-700"
+                  : "bg-pink-100 text-pink-700"
+              }
+            `}
+          >
+            {esPeligroso ? (
+              <AlertTriangle className="h-7 w-7" />
+            ) : (
+              <Save className="h-7 w-7" />
             )}
-          </tbody>
-        </table>
+          </div>
+
+          <h2
+            id="confirmation-modal-title"
+            className="
+              mt-4 text-lg font-bold
+              sm:mt-5 sm:text-xl
+              text-slate-900
+            "
+          >
+            {title}
+          </h2>
+
+          <p
+            id="confirmation-modal-message"
+            className="
+              mt-2 text-sm leading-6
+              text-slate-600
+            "
+          >
+            {message}
+          </p>
+        </div>
+
+        <div
+          className="
+            flex flex-col-reverse gap-3
+            border-t border-slate-200
+            bg-slate-50 px-5 py-4
+            sm:px-6 sm:py-5
+            sm:flex-row sm:justify-end
+          "
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="
+              rounded-2xl border
+              border-slate-300 bg-white
+              px-5 py-3 font-semibold
+              text-slate-700 transition
+              hover:bg-slate-100
+              focus:outline-none
+              focus:ring-4
+              focus:ring-slate-200
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+              sm:w-auto
+            "
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            autoFocus
+            className={`
+              flex items-center
+              justify-center gap-2
+              rounded-2xl px-5 py-3
+              font-semibold text-white
+              shadow-sm transition
+              focus:outline-none
+              focus:ring-4
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+              sm:w-auto
+              ${
+                esPeligroso
+                  ? `
+                    bg-red-600
+                    hover:bg-red-700
+                    focus:ring-red-200
+                  `
+                  : `
+                    bg-pink-600
+                    hover:bg-pink-700
+                    focus:ring-pink-200
+                  `
+              }
+            `}
+          >
+            {loading && <LoaderCircle className="h-5 w-5 animate-spin" />}
+
+            {loading ? "Procesando..." : confirmText}
+          </button>
+        </div>
       </div>
-    </Card>
+    </div>
+  );
+}
+
+function ErrorModal({
+  open,
+  title,
+  message,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="
+        fixed inset-0 z-[160]
+        flex items-end justify-center
+        bg-slate-950/45 p-3
+        sm:items-center sm:p-4
+        backdrop-blur-[2px]
+      "
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="error-modal-title"
+        aria-describedby="error-modal-message"
+        className="
+          max-h-[90dvh] w-full overflow-y-auto
+          sm:max-w-md
+          rounded-3xl border border-slate-200
+          bg-white shadow-2xl
+        "
+      >
+        <div className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div
+              className="
+                flex h-14 w-14 shrink-0
+                items-center justify-center
+                rounded-2xl bg-red-100
+                text-red-700
+              "
+            >
+              <AlertTriangle className="h-7 w-7" />
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="
+                rounded-full p-2
+                text-slate-400 transition
+                hover:bg-slate-100
+                hover:text-slate-700
+                focus:outline-none
+                focus:ring-4
+                focus:ring-slate-100
+              "
+              aria-label="Cerrar modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <h2
+            id="error-modal-title"
+            className="mt-5 text-xl font-bold text-slate-900"
+          >
+            {title}
+          </h2>
+
+          <p
+            id="error-modal-message"
+            className="
+              mt-2 whitespace-pre-line
+              text-sm leading-6 text-slate-600
+            "
+          >
+            {message}
+          </p>
+        </div>
+
+        <div
+          className="
+            flex justify-end border-t
+            border-slate-200 bg-slate-50
+            px-6 py-5
+          "
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            autoFocus
+            className="
+              w-full rounded-2xl bg-red-600
+              px-6 py-3
+              sm:w-auto font-semibold
+              text-white shadow-sm transition
+              hover:bg-red-700
+              focus:outline-none focus:ring-4
+              focus:ring-red-200
+            "
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Snackbar({
+  open,
+  type,
+  message,
+  onClose,
+}: {
+  open: boolean;
+  type: "success" | "error";
+  message: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const timeout = window.setTimeout(onClose, 3500);
+
+    return () => window.clearTimeout(timeout);
+  }, [open, message, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  const esError = type === "error";
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="
+        fixed bottom-3 left-3 right-3 z-[170]
+        flex w-auto max-w-none
+        sm:bottom-6 sm:left-auto sm:right-6
+        sm:w-[calc(100%-3rem)] sm:max-w-md
+        items-start gap-3 rounded-2xl
+        border bg-white p-4 shadow-2xl
+        sm:w-full
+      "
+    >
+      <div
+        className={`
+          flex h-9 w-9 shrink-0
+          items-center justify-center rounded-xl
+          ${esError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}
+        `}
+      >
+        {esError ? (
+          <AlertTriangle className="h-5 w-5" />
+        ) : (
+          <CheckCircle2 className="h-5 w-5" />
+        )}
+      </div>
+
+      <p className="min-w-0 flex-1 pt-1.5 text-sm font-medium text-slate-700">
+        {message}
+      </p>
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="
+          rounded-lg p-1.5 text-slate-400
+          transition hover:bg-slate-100
+          hover:text-slate-700
+          focus:outline-none focus:ring-4
+          focus:ring-slate-100
+        "
+        aria-label="Cerrar notificación"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
   );
 }

@@ -1,11 +1,13 @@
+import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
 
 import {
+  CalendarCheck,
+  Clock,
   LayoutDashboard,
   Users,
   Wallet,
-  CalendarCheck,
-  Clock,
+  X,
 } from "lucide-react";
 
 const items = [
@@ -36,78 +38,236 @@ const items = [
   },
 ];
 
-export default function Sidebar() {
+type SidebarProps = {
+  open: boolean;
+  onClose: () => void;
+};
+
+export default function Sidebar({ open, onClose }: SidebarProps) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const manejarEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", manejarEscape);
+
+    const overflowAnterior = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", manejarEscape);
+
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, [open, onClose]);
+
   return (
-    <aside className="flex h-screen w-[260px] shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-6">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
-          <img
-            src="/logo.png"
-            alt="Logo Flechas de Vida"
-            className="h-full w-full object-contain"
-          />
-        </div>
+    <>
+      <div
+        onClick={onClose}
+        aria-hidden="true"
+        className={`
+          fixed inset-0 z-40
+          bg-slate-950/40
+          backdrop-blur-[1px]
+          transition-opacity duration-300
+          lg:hidden
+          ${
+            open
+              ? "pointer-events-auto opacity-100"
+              : "pointer-events-none opacity-0"
+          }
+        `}
+      />
 
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold text-slate-900">
-            Flechas de Vida
-          </h1>
-
-          <p className="text-sm text-slate-500">
-            Dashboard interno
-          </p>
-        </div>
-      </div>
-
-      <nav className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-        {items.map((item) => {
-          const Icon = item.icon;
-
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `
-                  flex items-center gap-3 rounded-2xl px-4 py-3
-                  transition-all duration-200
-                  ${
-                    isActive
-                      ? "bg-pink-100 text-pink-700"
-                      : "text-slate-600 hover:bg-slate-100"
-                  }
-                `
-              }
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50
+          flex h-dvh w-[280px]
+          max-w-[85vw] shrink-0
+          flex-col border-r
+          border-slate-200 bg-white
+          shadow-2xl
+          transition-transform
+          duration-300 ease-out
+          lg:static lg:z-auto
+          lg:h-screen lg:w-[260px]
+          lg:max-w-none
+          lg:translate-x-0
+          lg:shadow-none
+          ${open ? "translate-x-0" : "-translate-x-full"}
+        `}
+        aria-hidden={!open}
+      >
+        <div
+          className="
+            flex items-center
+            justify-between gap-3
+            border-b border-slate-100
+            px-5 py-5
+            lg:px-6 lg:py-6
+          "
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className="
+                flex h-12 w-12
+                shrink-0 items-center
+                justify-center rounded-2xl
+              "
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              <img
+                src="/logo.png"
+                alt="Logo Flechas de Vida"
+                className="
+                  h-full w-full
+                  object-contain
+                "
+              />
+            </div>
 
-              <span className="font-medium">
-                {item.label}
-              </span>
-            </NavLink>
-          );
-        })}
-      </nav>
+            <div className="min-w-0">
+              <h1
+                className="
+                  truncate text-lg
+                  font-bold text-slate-900
+                "
+              >
+                Flechas de Vida
+              </h1>
 
-      <div className="border-t border-slate-200 px-5 py-4">
-        <div className="flex items-center justify-center gap-2">
-          <img
-            src="/upsoftworks.png"
-            alt="UP Softworks"
-            className="h-7 w-7 object-contain"
-          />
+              <p
+                className="
+                  truncate text-sm
+                  text-slate-500
+                "
+              >
+                Dashboard interno
+              </p>
+            </div>
+          </div>
 
-          <div className="leading-tight pl-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400">
-              Developed by
-            </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="
+              rounded-full p-2
+              text-slate-500
+              transition-colors
+              hover:bg-slate-100
+              hover:text-slate-900
+              focus:outline-none
+              focus:ring-4
+              focus:ring-pink-100
+              lg:hidden
+            "
+            aria-label="Cerrar menú"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-            <p className="text-xs font-semibold text-slate-700">
-              UP Softworks
-            </p>
+        <nav
+          className="
+            flex flex-1 flex-col gap-2
+            overflow-y-auto p-4
+          "
+        >
+          {items.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === "/"}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `
+                    flex items-center
+                    gap-3 rounded-2xl
+                    px-4 py-3.5
+                    transition-all
+                    duration-200
+                    ${
+                      isActive
+                        ? `
+                          bg-pink-100
+                          text-pink-700
+                          shadow-sm
+                        `
+                        : `
+                          text-slate-600
+                          hover:bg-slate-100
+                          hover:text-slate-900
+                        `
+                    }
+                  `
+                }
+              >
+                <Icon
+                  className="
+                    h-5 w-5 shrink-0
+                  "
+                />
+
+                <span className="font-medium">{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        <div
+          className="
+            border-t border-slate-200
+            px-5 py-4
+          "
+        >
+          <div
+            className="
+              flex items-center
+              justify-center gap-2
+            "
+          >
+            <img
+              src="/upsoftworks.png"
+              alt="UP Softworks"
+              className="
+                h-7 w-7
+                object-contain
+              "
+            />
+
+            <div className="pl-2 leading-tight">
+              <p
+                className="
+                  text-[10px] uppercase
+                  tracking-wider
+                  text-slate-400
+                "
+              >
+                Developed by
+              </p>
+
+              <p
+                className="
+                  text-xs font-semibold
+                  text-slate-700
+                "
+              >
+                UP Softworks
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
