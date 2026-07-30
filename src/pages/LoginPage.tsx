@@ -257,8 +257,9 @@ export default function LoginPage() {
             <section className="w-full">
               <div
                 className="
-                  mb-8 flex items-center
-                  justify-center gap-4
+                  mb-8 flex flex-col
+                  items-center justify-center
+                  text-center
                   lg:hidden
                 "
               >
@@ -266,19 +267,23 @@ export default function LoginPage() {
                   src="/logo.png"
                   alt="Logo Flechas de Vida"
                   className="
-                    h-20 w-20
+                    h-32 w-32
                     object-contain
                     drop-shadow-2xl
+                    sm:h-36 sm:w-36
                   "
                 />
 
-                <div>
-                  <p className="text-xl font-bold text-white">
+                <div className="mt-3">
+                  <p
+                    className="
+                      text-2xl font-bold
+                      text-white
+                      drop-shadow-lg
+                      sm:text-3xl
+                    "
+                  >
                     Flechas de Vida
-                  </p>
-
-                  <p className="mt-1 text-sm text-white/75">
-                    Dashboard interno
                   </p>
                 </div>
               </div>
