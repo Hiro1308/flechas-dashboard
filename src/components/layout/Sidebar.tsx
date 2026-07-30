@@ -1,14 +1,17 @@
-import { useEffect } from "react";
-import { NavLink } from "react-router-dom";
-
+import { useEffect, useState } from "react";
 import {
   CalendarCheck,
   Clock,
   LayoutDashboard,
+  LoaderCircle,
+  LogOut,
   Users,
   Wallet,
   X,
 } from "lucide-react";
+import { NavLink, useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../auth/AuthProvider";
 
 const items = [
   {
@@ -44,6 +47,12 @@ type SidebarProps = {
 };
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
+  const navigate = useNavigate();
+
+  const { signOut } = useAuth();
+
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
+
   useEffect(() => {
     if (!open) {
       return;
@@ -67,6 +76,28 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       document.body.style.overflow = overflowAnterior;
     };
   }, [open, onClose]);
+
+  const cerrarSesion = async () => {
+    if (cerrandoSesion) {
+      return;
+    }
+
+    setCerrandoSesion(true);
+
+    try {
+      await signOut();
+
+      onClose();
+
+      navigate("/login", {
+        replace: true,
+      });
+    } catch (error) {
+      console.error("No se pudo cerrar sesión:", error);
+    } finally {
+      setCerrandoSesion(false);
+    }
+  };
 
   return (
     <>
@@ -212,11 +243,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   `
                 }
               >
-                <Icon
-                  className="
-                    h-5 w-5 shrink-0
-                  "
-                />
+                <Icon className="h-5 w-5 shrink-0" />
 
                 <span className="font-medium">{item.label}</span>
               </NavLink>
@@ -230,10 +257,40 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             px-5 py-4
           "
         >
+          <button
+            type="button"
+            onClick={() => void cerrarSesion()}
+            disabled={cerrandoSesion}
+            className="
+              mx-auto flex items-center
+              justify-center gap-2
+              text-sm font-semibold
+              text-red-500
+              transition-colors
+              hover:text-red-700
+              focus:outline-none
+              focus-visible:underline
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+            "
+          >
+            {cerrandoSesion ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
+
+            <span>
+              {cerrandoSesion ? "Cerrando sesión..." : "Cerrar sesión"}
+            </span>
+          </button>
+
           <div
             className="
-              flex items-center
+              mt-4 flex items-center
               justify-center gap-2
+              border-t border-slate-100
+              pt-4
             "
           >
             <img
